@@ -1,0 +1,9 @@
+{
+  "fiveHourRemainingPercent": 73,
+  "weeklyRemainingPercent": 91,
+  "fiveHourResetAt": "2026-06-10T16:00:00+08:00",
+  "weeklyResetAt": "2026-06-11T10:30:00+08:00",
+  "planName": "Codex",
+  "sourceName": "Local quota.json",
+  "note": "Fallback demo data. The MTMR helper reads real Codex session rate_limits first."
+}

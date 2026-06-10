@@ -1,0 +1,73 @@
+[
+  {
+    "type": "escape",
+    "width": 64,
+    "align": "left"
+  },
+  {
+    "type": "dnd",
+    "align": "left",
+    "width": 38
+  },
+  {
+    "type": "brightnessDown",
+    "width": 32,
+    "bordered": false,
+    "align": "left"
+  },
+  {
+    "type": "brightnessUp",
+    "width": 32,
+    "bordered": false,
+    "align": "left"
+  },
+  {
+    "type": "shellScriptTitledButton",
+    "align": "center",
+    "width": 430,
+    "bordered": true,
+    "refreshInterval": 600,
+    "source": {
+      "inline": "__CODEX_QUOTA_COMMAND__"
+    }
+  },
+  {
+    "type": "displaySleep",
+    "width": 40,
+    "align": "right",
+    "bordered": false
+  },
+  {
+    "type": "volumeDown",
+    "bordered": false,
+    "align": "right",
+    "width": 28
+  },
+  {
+    "type": "volumeUp",
+    "bordered": false,
+    "align": "right",
+    "width": 28
+  },
+  {
+    "type": "play",
+    "align": "right",
+    "width": 38
+  },
+  {
+    "type": "battery",
+    "align": "right",
+    "bordered": false
+  },
+  {
+    "type": "timeButton",
+    "formatTemplate": "HH:mm",
+    "align": "right",
+    "bordered": false,
+    "longAction": "shellScript",
+    "longExecutablePath": "/usr/bin/pmset",
+    "longShellArguments": [
+      "sleepnow"
+    ]
+  }
+]

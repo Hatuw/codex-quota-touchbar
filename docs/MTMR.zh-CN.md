@@ -1,0 +1,71 @@
+# MTMR 设置
+
+[English](MTMR.md) | [中文](MTMR.zh-CN.md)
+
+MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额度组件继续显示在 Touch Bar 上。
+
+## 安装
+
+1. 从 MTMR 项目页安装 MTMR：https://github.com/toxblh/MTMR
+2. 先打开一次 MTMR。
+3. 在本仓库目录中运行：
+
+   ```bash
+   ./scripts/install_mtmr_config.sh
+   ```
+
+4. 重启 MTMR：
+
+   ```bash
+   pkill -x MTMR || true
+   open -a /Applications/MTMR.app
+   ```
+
+## 安装脚本做了什么
+
+安装脚本会：
+
+1. 读取 `mtmr/items.template.json`。
+2. 把 `__CODEX_QUOTA_COMMAND__` 替换成本地 helper 脚本路径。
+3. 备份已有的 MTMR 配置。
+4. 写入 `~/Library/Application Support/MTMR/items.json`。
+
+## 当前组件格式
+
+```text
+5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02
+```
+
+第一个额度是 5 小时窗口，第二个额度是周窗口。
+中文 locale 会显示 `周`，其他 locale 会显示 `W`。
+如果想强制指定 label，可以在 inline command 中设置 `CODEX_QUOTA_WEEK_LABEL`。
+
+## 数据来源
+
+helper 会扫描本地 Codex session 文件，并读取最新的 `payload.rate_limits` 事件；默认只接受 `rate_limits.limit_id` 为 `codex` 的记录。
+这样可以避免模型专属或实验额度池覆盖 Codex Pro 额度。
+
+如果需要读取其他额度池，可以在 inline command 中设置 `CODEX_QUOTA_LIMIT_ID`。设置为 `*` 时会接受所有 rate limit 记录。
+
+## 调整样式
+
+打开 `mtmr/items.template.json`，可以调整：
+
+- `width`：MTMR 按钮宽度。
+- `refreshInterval`：刷新间隔，单位是秒。
+
+如果想修改血条长度，可以在 inline command 里设置 `CODEX_QUOTA_BAR_SLOTS`：
+
+```json
+{
+  "source": {
+    "inline": "CODEX_QUOTA_BAR_SLOTS=10 /path/to/scripts/codex_quota_touchbar.sh compact-bar"
+  }
+}
+```
+
+修改模板后重新运行：
+
+```bash
+./scripts/install_mtmr_config.sh
+```

@@ -1,0 +1,17 @@
+.DS_Store
+.build/
+DerivedData/
+
+# Local build and generated artifacts
+outputs/
+work/
+
+# Local editor and environment noise
+.idea/
+.vscode/
+*.log
+
+# macOS app bundles and archives
+*.app/
+*.dmg
+*.zip
