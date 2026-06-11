@@ -250,6 +250,8 @@ def accepted_limit_ids() -> set[str] | None:
 
 
 ACCEPTED_LIMIT_IDS = accepted_limit_ids()
+SESSION_SCAN_MAX_BYTES = 64 * 1024 * 1024
+SESSION_SCAN_CHUNK_BYTES = 1024 * 1024
 
 
 def accepts_rate_limit(raw: object) -> bool:
@@ -272,6 +274,42 @@ def rate_window(raw: object) -> tuple[float, datetime] | None:
         return max(0.0, min(100.0, 100.0 - used_percent)), resets_at
     except Exception:
         return None
+
+
+def reversed_session_lines(path: Path):
+    size = path.stat().st_size
+    offset = size
+    scanned = 0
+    pending = b""
+
+    with path.open("rb") as handle:
+        while offset > 0 and scanned < SESSION_SCAN_MAX_BYTES:
+            read_size = min(SESSION_SCAN_CHUNK_BYTES, offset, SESSION_SCAN_MAX_BYTES - scanned)
+            if read_size <= 0:
+                break
+
+            offset -= read_size
+            handle.seek(offset)
+            chunk = handle.read(read_size)
+            scanned += read_size
+
+            data = chunk + pending
+            lines = data.split(b"\n")
+            if offset > 0:
+                pending = lines[0]
+                lines = lines[1:]
+            else:
+                pending = b""
+
+            for raw_line in reversed(lines):
+                line = raw_line.rstrip(b"\r").decode("utf-8", errors="ignore")
+                if line:
+                    yield line
+
+        if pending:
+            line = pending.rstrip(b"\r").decode("utf-8", errors="ignore")
+            if line:
+                yield line
 
 
 def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None:
@@ -300,18 +338,11 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
                 break
 
         try:
-            size = path.stat().st_size
-            start = max(0, size - 2 * 1024 * 1024)
-            with path.open("rb") as handle:
-                handle.seek(start)
-                raw = handle.read().decode("utf-8", errors="ignore")
-            lines = raw.splitlines()
-            if start > 0 and lines:
-                lines = lines[1:]
+            lines = reversed_session_lines(path)
         except OSError:
             continue
 
-        for line in reversed(lines):
+        for line in lines:
             if '"rate_limits"' not in line:
                 continue
 
