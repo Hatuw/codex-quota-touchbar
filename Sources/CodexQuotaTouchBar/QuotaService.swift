@@ -79,17 +79,23 @@ enum QuotaProviderError: LocalizedError {
 final class CompositeQuotaProvider: QuotaProviding {
     private let codexProvider: QuotaProviding
     private let fallbackProvider: QuotaProviding
+    private let useFallback: Bool
 
     init(
         codexProvider: QuotaProviding = CodexRateLimitProvider(),
-        fallbackProvider: QuotaProviding = LocalQuotaFileProvider()
+        fallbackProvider: QuotaProviding = LocalQuotaFileProvider(),
+        useFallback: Bool = ProcessInfo.processInfo.environment["CODEX_QUOTA_USE_FALLBACK"] == "1"
     ) {
         self.codexProvider = codexProvider
         self.fallbackProvider = fallbackProvider
+        self.useFallback = useFallback
     }
 
     var sourceDescription: String {
-        "\(codexProvider.sourceDescription), fallback: \(fallbackProvider.sourceDescription)"
+        if useFallback {
+            return "\(codexProvider.sourceDescription), fallback: \(fallbackProvider.sourceDescription)"
+        }
+        return codexProvider.sourceDescription
     }
 
     func loadSnapshot() throws -> QuotaSnapshot {
@@ -97,6 +103,9 @@ final class CompositeQuotaProvider: QuotaProviding {
             return try codexProvider.loadSnapshot()
         } catch {
             AppLogger.shared.error("Codex rate limit provider failed: \(error.localizedDescription)")
+            guard useFallback else {
+                throw error
+            }
             return try fallbackProvider.loadSnapshot()
         }
     }

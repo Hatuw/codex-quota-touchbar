@@ -17,12 +17,15 @@ Modes:
   primary            Five-hour quota without a bar.
   weekly             Weekly quota without a bar.
   compact            Single-line plain text without bars.
+  refresh-mtmr       Restart MTMR so the Touch Bar widget redraws immediately.
   multiline          Default two-line plain text output.
 
 Environment:
   CODEX_SESSIONS_DIR       Codex sessions directory. Default: ~/.codex/sessions
   CODEX_QUOTA_FILE         Fallback JSON file. Default: ~/Library/Application Support/CodexQuotaTouchBar/quota.json
   CODEX_QUOTA_LIMIT_ID     Rate limit id to read. Default: codex. Use * to accept all.
+  CODEX_QUOTA_USE_FALLBACK=1
+                           Read CODEX_QUOTA_FILE when no real Codex data is available.
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
   CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
@@ -58,6 +61,10 @@ ANSI_YELLOW = "\033[93m"
 ANSI_RED = "\033[91m"
 
 
+class QuotaReadError(Exception):
+    pass
+
+
 def emit(text: str) -> None:
     print(text)
 
@@ -72,6 +79,19 @@ def emit(text: str) -> None:
             handle.write(f"{now}\t{display_mode}\t{text}\n")
     except Exception:
         pass
+
+
+def localized(chinese: str, english: str) -> str:
+    return chinese if uses_chinese_label() else english
+
+
+def emit_error(message: str) -> None:
+    title = localized("⚠ 额度读取失败", "⚠ quota error")
+    compact_modes = {"compact-bar", "horizontal-bar", "compact"}
+    if display_mode in compact_modes:
+        emit(f"{ANSI_RED}{title}{ANSI_RESET}")
+    else:
+        emit(f"{ANSI_RED}{title}{ANSI_RESET}\n{message}")
 
 
 def parse_date(raw: str | None) -> datetime | None:
@@ -256,7 +276,7 @@ def rate_window(raw: object) -> tuple[float, datetime] | None:
 
 def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None:
     if not sessions_dir.exists():
-        return None
+        raise QuotaReadError(f"Cannot find Codex sessions directory: {sessions_dir}")
 
     files = []
     for path in sessions_dir.rglob("*.jsonl"):
@@ -266,6 +286,9 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
             continue
 
     files.sort(reverse=True)
+
+    if not files:
+        raise QuotaReadError(f"No Codex session JSONL files found under: {sessions_dir}")
 
     best_seen_at: datetime | None = None
     best_value: tuple[float, datetime, float, datetime] | None = None
@@ -313,6 +336,10 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
 
             break
 
+    if best_value is None:
+        accepted = "*" if ACCEPTED_LIMIT_IDS is None else ",".join(sorted(ACCEPTED_LIMIT_IDS))
+        raise QuotaReadError(f"No matching Codex rate limit event found for limit_id={accepted}")
+
     return best_value
 
 
@@ -340,37 +367,57 @@ def local_quota_fallback() -> tuple[float | None, datetime | None, float | None,
     )
 
 
-real = latest_codex_rate_limits()
-if real is not None:
-    five_hour, five_hour_reset, weekly, weekly_reset = real
-else:
-    five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
+try:
+    if display_mode == "refresh-mtmr":
+        subprocess.Popen(
+            [
+                "/bin/sh",
+                "-c",
+                "sleep 0.2; /usr/bin/pkill -x MTMR || true; /usr/bin/open -a /Applications/MTMR.app",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        emit(localized("↻ 刷新中", "↻ refreshing"))
+        sys.exit(0)
 
-weekly_quota_label = weekly_label()
+    try:
+        five_hour, five_hour_reset, weekly, weekly_reset = latest_codex_rate_limits()
+    except QuotaReadError:
+        if os.environ.get("CODEX_QUOTA_USE_FALLBACK") != "1":
+            raise
+        five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
+        if five_hour is None or weekly is None:
+            raise QuotaReadError(f"Fallback quota file is missing or invalid: {quota_file}")
 
-primary_text = f"5h {colored_percent(five_hour)} {format_time(five_hour_reset)}"
-weekly_text = f"{weekly_quota_label} {colored_percent(weekly)} {format_time(weekly_reset)}"
-bar_slots = compact_bar_slots()
-primary_bar_text = f"5h {progress_bar(five_hour)} {colored_percent(five_hour)} {format_time(five_hour_reset)}"
-weekly_bar_text = f"{weekly_quota_label} {progress_bar(weekly)} {colored_percent(weekly)} {format_time(weekly_reset)}"
-compact_bar_text = (
-    f"{colored_label('5h', five_hour)} {progress_bar(five_hour, bar_slots)} {colored_percent(five_hour)} {format_time_compact(five_hour_reset)} "
-    f"{ANSI_GRAY}|{ANSI_RESET} "
-    f"{colored_label(weekly_quota_label, weekly)} {progress_bar(weekly, bar_slots)} {colored_percent(weekly)} {format_time_compact(weekly_reset)}"
-)
+    weekly_quota_label = weekly_label()
 
-if display_mode in {"primary", "5h", "five-hour"}:
-    emit(primary_text)
-elif display_mode in {"secondary", "week", "weekly"}:
-    emit(weekly_text)
-elif display_mode in {"primary-bar", "5h-bar", "five-hour-bar"}:
-    emit(primary_bar_text)
-elif display_mode in {"secondary-bar", "week-bar", "weekly-bar"}:
-    emit(weekly_bar_text)
-elif display_mode in {"compact-bar", "horizontal-bar"}:
-    emit(compact_bar_text)
-elif display_mode == "compact":
-    emit(f"{primary_text} | {weekly_text}")
-else:
-    emit(f"{primary_text}\n{weekly_text}")
+    primary_text = f"5h {colored_percent(five_hour)} {format_time(five_hour_reset)}"
+    weekly_text = f"{weekly_quota_label} {colored_percent(weekly)} {format_time(weekly_reset)}"
+    bar_slots = compact_bar_slots()
+    primary_bar_text = f"5h {progress_bar(five_hour)} {colored_percent(five_hour)} {format_time(five_hour_reset)}"
+    weekly_bar_text = f"{weekly_quota_label} {progress_bar(weekly)} {colored_percent(weekly)} {format_time(weekly_reset)}"
+    compact_bar_text = (
+        f"{colored_label('5h', five_hour)} {progress_bar(five_hour, bar_slots)} {colored_percent(five_hour)} {format_time_compact(five_hour_reset)} "
+        f"{ANSI_GRAY}|{ANSI_RESET} "
+        f"{colored_label(weekly_quota_label, weekly)} {progress_bar(weekly, bar_slots)} {colored_percent(weekly)} {format_time_compact(weekly_reset)}"
+    )
+
+    if display_mode in {"primary", "5h", "five-hour"}:
+        emit(primary_text)
+    elif display_mode in {"secondary", "week", "weekly"}:
+        emit(weekly_text)
+    elif display_mode in {"primary-bar", "5h-bar", "five-hour-bar"}:
+        emit(primary_bar_text)
+    elif display_mode in {"secondary-bar", "week-bar", "weekly-bar"}:
+        emit(weekly_bar_text)
+    elif display_mode in {"compact-bar", "horizontal-bar"}:
+        emit(compact_bar_text)
+    elif display_mode == "compact":
+        emit(f"{primary_text} | {weekly_text}")
+    else:
+        emit(f"{primary_text}\n{weekly_text}")
+except Exception as error:
+    emit_error(str(error))
 PY

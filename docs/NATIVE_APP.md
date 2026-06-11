@@ -24,10 +24,12 @@ outputs/CodexQuotaTouchBar.app
 
 Open the generated app and click its window so it becomes the active app. Its custom Touch Bar item should appear.
 
-The app reads the same data sources as the MTMR helper:
+The app reads the same data source as the MTMR helper:
 
 1. Latest Codex `rate_limits` event under `~/.codex/sessions`.
-2. Fallback JSON at `~/Library/Application Support/CodexQuotaTouchBar/quota.json`.
+
+If the read fails, the app shows an error instead of keeping an old quota value.
+For local testing, set `CODEX_QUOTA_USE_FALLBACK=1` to read the fallback JSON at `~/Library/Application Support/CodexQuotaTouchBar/quota.json`.
 
 ## Touch Bar Customization
 

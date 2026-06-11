@@ -26,26 +26,30 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 安装脚本会：
 
 1. 读取 `mtmr/items.template.json`。
-2. 把 `__CODEX_QUOTA_COMMAND__` 替换成本地 helper 脚本路径。
+2. 把 `__CODEX_QUOTA_COMMAND__` 和 `__CODEX_QUOTA_SCRIPT_PATH__` 替换成本地 helper 脚本路径。
 3. 备份已有的 MTMR 配置。
 4. 写入 `~/Library/Application Support/MTMR/items.json`。
 
 ## 当前组件格式
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02
+5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
 ```
 
 第一个额度是 5 小时窗口，第二个额度是周窗口。
 中文 locale 会显示 `周`，其他 locale 会显示 `W`。
 如果想强制指定 label，可以在 inline command 中设置 `CODEX_QUOTA_WEEK_LABEL`。
 
+`↻` 按钮会在后台重启 MTMR，让额度组件立刻重绘，不用等待下一次 10 分钟自动刷新。
+
 ## 数据来源
 
 helper 会扫描本地 Codex session 文件，并读取最新的 `payload.rate_limits` 事件；默认只接受 `rate_limits.limit_id` 为 `codex` 的记录。
 这样可以避免模型专属或实验额度池覆盖 Codex Pro 额度。
+如果没有找到匹配的额度数据，组件会显示错误，不会继续保留旧额度。
 
 如果需要读取其他额度池，可以在 inline command 中设置 `CODEX_QUOTA_LIMIT_ID`。设置为 `*` 时会接受所有 rate limit 记录。
+只有明确想用 fallback JSON 测试时，才建议设置 `CODEX_QUOTA_USE_FALLBACK=1`。
 
 ## 调整样式
 

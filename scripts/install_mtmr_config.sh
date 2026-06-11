@@ -32,7 +32,7 @@ if [[ -f "$TARGET_CONFIG" ]]; then
   echo "Backed up existing MTMR config: $backup"
 fi
 
-/usr/bin/python3 - "$TEMPLATE_CONFIG" "$TARGET_CONFIG" "$COMMAND" <<'PY'
+/usr/bin/python3 - "$TEMPLATE_CONFIG" "$TARGET_CONFIG" "$COMMAND" "$SCRIPT_PATH" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -40,6 +40,7 @@ import sys
 template_path = Path(sys.argv[1])
 target_path = Path(sys.argv[2])
 command = sys.argv[3]
+script_path = sys.argv[4]
 
 data = json.loads(template_path.read_text(encoding="utf-8"))
 
@@ -51,6 +52,8 @@ def replace_placeholders(value):
         return [replace_placeholders(item) for item in value]
     if value == "__CODEX_QUOTA_COMMAND__":
         return command
+    if value == "__CODEX_QUOTA_SCRIPT_PATH__":
+        return script_path
     return value
 
 

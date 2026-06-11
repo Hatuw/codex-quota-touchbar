@@ -32,6 +32,23 @@
     }
   },
   {
+    "type": "staticButton",
+    "title": "↻",
+    "align": "center",
+    "width": 34,
+    "bordered": true,
+    "actions": [
+      {
+        "trigger": "singleTap",
+        "action": "shellScript",
+        "executablePath": "__CODEX_QUOTA_SCRIPT_PATH__",
+        "shellArguments": [
+          "refresh-mtmr"
+        ]
+      }
+    ]
+  },
+  {
     "type": "displaySleep",
     "width": 40,
     "align": "right",

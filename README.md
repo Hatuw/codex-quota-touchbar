@@ -13,7 +13,7 @@ Show your Codex quota on the Mac Touch Bar.
 The default MTMR widget is a compact single-line display:
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02
+5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
 ```
 
 Colors are applied in MTMR:
@@ -81,7 +81,9 @@ Displayed remaining quota is calculated as:
 remaining = 100 - used_percent
 ```
 
-If no Codex rate limit event is found, the helper falls back to:
+If no Codex rate limit event is found, the helper shows an error instead of keeping an old quota on screen.
+
+For local testing only, you can opt into the fallback JSON file by setting `CODEX_QUOTA_USE_FALLBACK=1`:
 
 ```text
 ~/Library/Application Support/CodexQuotaTouchBar/quota.json
@@ -102,6 +104,7 @@ Useful settings:
 - `refreshInterval`: default `600`, meaning 10 minutes.
 - `width`: default `430`, the Touch Bar button width.
 - `CODEX_QUOTA_LIMIT_ID`: default `codex`, controls which `rate_limits.limit_id` is displayed. Use `*` to accept all rate limit records.
+- `CODEX_QUOTA_USE_FALLBACK`: default off. Set to `1` to read `CODEX_QUOTA_FILE` when no real Codex data is available.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
 - `CODEX_QUOTA_BAR_SLOTS`: default `8`, controls bar length.
@@ -154,6 +157,7 @@ Useful environment variables:
 CODEX_SESSIONS_DIR="$HOME/.codex/sessions"
 CODEX_QUOTA_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/quota.json"
 CODEX_QUOTA_LIMIT_ID=codex
+CODEX_QUOTA_USE_FALLBACK=0
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
 CODEX_QUOTA_BAR_SLOTS=8
@@ -221,7 +225,7 @@ If the widget does not update:
   tail -f "$HOME/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log"
   ```
 
-If the widget shows fallback or demo values, Codex may not have written a recent `rate_limits` event yet. Start or continue a Codex session, then run the helper again.
+If the widget shows an error, Codex may not have written a recent `rate_limits` event yet. Start or continue a Codex session, tap the `↻` button, or run the helper again.
 
 ## Limitations
 

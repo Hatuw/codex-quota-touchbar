@@ -27,7 +27,9 @@ outputs/CodexQuotaTouchBar.app
 这个 App 和 MTMR helper 读取相同的数据源：
 
 1. `~/.codex/sessions` 下最新的 Codex `rate_limits` 事件。
-2. fallback JSON：`~/Library/Application Support/CodexQuotaTouchBar/quota.json`。
+
+如果读取失败，App 会显示错误，不会继续保留旧额度。
+本地测试时可以设置 `CODEX_QUOTA_USE_FALLBACK=1`，读取 fallback JSON：`~/Library/Application Support/CodexQuotaTouchBar/quota.json`。
 
 ## Touch Bar 自定义
 

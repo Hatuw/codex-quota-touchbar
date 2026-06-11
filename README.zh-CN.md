@@ -13,7 +13,7 @@
 默认 MTMR 组件是一行紧凑显示：
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02
+5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
 ```
 
 在 MTMR 中会自动上色：
@@ -81,7 +81,9 @@ Codex session 文件是 JSONL 格式。本项目会扫描最近的文件：
 remaining = 100 - used_percent
 ```
 
-如果没有找到 Codex 的 rate limit 记录，脚本会回退读取：
+如果没有找到 Codex 的 rate limit 记录，脚本会显示错误，不会继续显示旧额度。
+
+只有本地测试时才建议显式开启 fallback JSON，设置 `CODEX_QUOTA_USE_FALLBACK=1` 后会读取：
 
 ```text
 ~/Library/Application Support/CodexQuotaTouchBar/quota.json
@@ -102,6 +104,7 @@ mtmr/items.template.json
 - `refreshInterval`：默认 `600`，表示 10 分钟刷新一次。
 - `width`：默认 `430`，表示 Touch Bar 按钮宽度。
 - `CODEX_QUOTA_LIMIT_ID`：默认 `codex`，控制显示哪个 `rate_limits.limit_id`。设置为 `*` 时会接受所有 rate limit 记录。
+- `CODEX_QUOTA_USE_FALLBACK`：默认关闭。设置为 `1` 时，如果没有真实 Codex 数据，会读取 `CODEX_QUOTA_FILE`。
 - `CODEX_QUOTA_LOCALE`：可选，用来指定 label 判断用的 locale。默认读取系统 locale。
 - `CODEX_QUOTA_WEEK_LABEL`：可选，用来强制指定周额度 label。默认中文 locale 显示 `周`，其他 locale 显示 `W`。
 - `CODEX_QUOTA_BAR_SLOTS`：默认 `8`，控制血条长度。
@@ -154,6 +157,7 @@ mtmr/items.template.json
 CODEX_SESSIONS_DIR="$HOME/.codex/sessions"
 CODEX_QUOTA_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/quota.json"
 CODEX_QUOTA_LIMIT_ID=codex
+CODEX_QUOTA_USE_FALLBACK=0
 CODEX_QUOTA_LOCALE=zh_CN
 CODEX_QUOTA_WEEK_LABEL=周
 CODEX_QUOTA_BAR_SLOTS=8
@@ -221,7 +225,7 @@ python3 -m json.tool mtmr/items.template.json >/dev/null
   tail -f "$HOME/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log"
   ```
 
-如果组件显示的是 fallback/demo 数据，说明 Codex 可能还没有写入最新的 `rate_limits` 事件。开始或继续一个 Codex session 后，再运行 helper 检查。
+如果组件显示错误，说明 Codex 可能还没有写入最新的 `rate_limits` 事件。开始或继续一个 Codex session 后，点 `↻` 按钮，或重新运行 helper 检查。
 
 ## 限制
 

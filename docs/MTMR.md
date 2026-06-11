@@ -26,26 +26,30 @@ MTMR is the recommended way to keep the quota widget visible while you use other
 The installer:
 
 1. Reads `mtmr/items.template.json`.
-2. Replaces `__CODEX_QUOTA_COMMAND__` with the local helper script path.
+2. Replaces `__CODEX_QUOTA_COMMAND__` and `__CODEX_QUOTA_SCRIPT_PATH__` with the local helper script path.
 3. Backs up the existing MTMR config.
 4. Writes `~/Library/Application Support/MTMR/items.json`.
 
 ## Current Widget Format
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02
+5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
 ```
 
 The first quota is the 5-hour window. The second quota is the weekly window.
 Chinese locales use the localized weekly label. Other locales show it as `W`.
 Set `CODEX_QUOTA_WEEK_LABEL` in the inline command to override that label.
 
+The `↻` button restarts MTMR in the background so the quota widget redraws immediately instead of waiting for the next 10-minute interval.
+
 ## Data Source
 
 The helper scans local Codex session files and reads the newest `payload.rate_limits` event whose `rate_limits.limit_id` is `codex`.
 This keeps model-specific or experimental limit pools from replacing the Codex Pro quota.
+If no matching quota data is found, the widget shows an error rather than keeping an old value on screen.
 
 To read a different limit id, set `CODEX_QUOTA_LIMIT_ID` in the inline command. Use `*` to accept all rate limit records.
+Set `CODEX_QUOTA_USE_FALLBACK=1` only when you intentionally want to test with the fallback JSON file.
 
 ## Tuning
 

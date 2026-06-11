@@ -159,7 +159,61 @@ final class QuotaSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.weeklyClampedPercent, 100)
     }
 
+    func testCompositeProviderDoesNotUseFallbackByDefault() {
+        let provider = CompositeQuotaProvider(
+            codexProvider: FailingQuotaProvider(),
+            fallbackProvider: StaticQuotaProvider(),
+            useFallback: false
+        )
+
+        XCTAssertThrowsError(try provider.loadSnapshot())
+    }
+
+    func testCompositeProviderUsesFallbackWhenEnabled() throws {
+        let provider = CompositeQuotaProvider(
+            codexProvider: FailingQuotaProvider(),
+            fallbackProvider: StaticQuotaProvider(),
+            useFallback: true
+        )
+
+        let snapshot = try provider.loadSnapshot()
+
+        XCTAssertEqual(snapshot.fiveHourClampedPercent, 12)
+        XCTAssertEqual(snapshot.weeklyClampedPercent, 34)
+        XCTAssertEqual(snapshot.sourceName, "Fallback Test")
+    }
+
     private func writeJSONL(_ content: String, to url: URL) throws {
         try content.appending("\n").write(to: url, atomically: true, encoding: .utf8)
     }
+}
+
+private struct FailingQuotaProvider: QuotaProviding {
+    var sourceDescription: String { "Failing Test" }
+
+    func loadSnapshot() throws -> QuotaSnapshot {
+        throw QuotaProviderError.noCodexRateLimitFound(URL(fileURLWithPath: "/tmp/missing"))
+    }
+
+    func openSource() {}
+}
+
+private struct StaticQuotaProvider: QuotaProviding {
+    var sourceDescription: String { "Fallback Test" }
+
+    func loadSnapshot() throws -> QuotaSnapshot {
+        QuotaSnapshot(
+            fiveHourRemainingPercent: 12,
+            weeklyRemainingPercent: 34,
+            planName: "Codex",
+            resetAt: nil,
+            fiveHourResetAt: Date(),
+            weeklyResetAt: Date(),
+            sourceName: sourceDescription,
+            note: nil,
+            isFallback: true
+        )
+    }
+
+    func openSource() {}
 }
