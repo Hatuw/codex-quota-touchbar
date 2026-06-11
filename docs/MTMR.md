@@ -44,11 +44,23 @@ The `↻` button restarts MTMR in the background so the quota widget redraws imm
 
 ## Data Source
 
-The helper scans local Codex session files and reads the newest `payload.rate_limits` event whose `rate_limits.limit_id` is `codex`.
-This keeps model-specific or experimental limit pools from replacing the Codex Pro quota.
+The helper reads `account/rateLimits/read` from the local Codex app-server by default.
+This usually matches the quota data shown by Codex Desktop more closely than session logs.
+
+The 5-hour quota uses the account primary quota from Codex's main `rateLimits` response.
+The weekly quota uses the account secondary quota from Codex's main `rateLimits` response.
+
+If app-server is unavailable, the helper falls back to local Codex session files and reads the newest matching `payload.rate_limits` event.
 If no matching quota data is found, the widget shows an error rather than keeping an old value on screen.
 
-To read a different limit id, set `CODEX_QUOTA_LIMIT_ID` in the inline command. Use `*` to accept all rate limit records.
+To tune the source or limit ids, set these variables in the inline command:
+
+- `CODEX_QUOTA_SOURCE=app-server` to require app-server.
+- `CODEX_QUOTA_SOURCE=sessions` to force session-log scanning.
+- `CODEX_QUOTA_PRIMARY_LIMIT_ID=...` for the 5-hour quota.
+- `CODEX_QUOTA_WEEKLY_LIMIT_ID=...` for the weekly quota.
+- `CODEX_QUOTA_LIMIT_ID=...` as a legacy override for both quota windows.
+
 Set `CODEX_QUOTA_USE_FALLBACK=1` only when you intentionally want to test with the fallback JSON file.
 
 ## Tuning

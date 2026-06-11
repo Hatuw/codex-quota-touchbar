@@ -44,11 +44,23 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 
 ## 数据来源
 
-helper 会扫描本地 Codex session 文件，并读取最新的 `payload.rate_limits` 事件；默认只接受 `rate_limits.limit_id` 为 `codex` 的记录。
-这样可以避免模型专属或实验额度池覆盖 Codex Pro 额度。
+helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
+这个数据通常比 session 日志更新，也更接近 Codex Desktop 自己显示的额度。
+
+5 小时额度默认使用 Codex 主 `rateLimits` 返回里的账号 primary 额度。
+周额度默认使用 Codex 主 `rateLimits` 返回里的账号 secondary 额度。
+
+如果 app-server 不可用，helper 会回退扫描本地 Codex session 文件，并读取最新匹配的 `payload.rate_limits` 事件。
 如果没有找到匹配的额度数据，组件会显示错误，不会继续保留旧额度。
 
-如果需要读取其他额度池，可以在 inline command 中设置 `CODEX_QUOTA_LIMIT_ID`。设置为 `*` 时会接受所有 rate limit 记录。
+如果需要调整数据源或额度池，可以在 inline command 中设置：
+
+- `CODEX_QUOTA_SOURCE=app-server`：只使用 app-server。
+- `CODEX_QUOTA_SOURCE=sessions`：强制扫描 session 日志。
+- `CODEX_QUOTA_PRIMARY_LIMIT_ID=...`：指定 5 小时额度池。
+- `CODEX_QUOTA_WEEKLY_LIMIT_ID=...`：指定周额度池。
+- `CODEX_QUOTA_LIMIT_ID=...`：旧版兼容配置，会同时覆盖两个额度窗口。
+
 只有明确想用 fallback JSON 测试时，才建议设置 `CODEX_QUOTA_USE_FALLBACK=1`。
 
 ## 调整样式

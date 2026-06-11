@@ -5,7 +5,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'USAGE'
 Codex Quota TouchBar helper
 
-Reads Codex local session JSONL files and prints quota text for MTMR or a terminal.
+Reads Codex local quota data and prints quota text for MTMR or a terminal.
 
 Usage:
   scripts/codex_quota_touchbar.sh [mode]
@@ -23,9 +23,15 @@ Modes:
 Environment:
   CODEX_SESSIONS_DIR       Codex sessions directory. Default: ~/.codex/sessions
   CODEX_QUOTA_FILE         Fallback JSON file. Default: ~/Library/Application Support/CodexQuotaTouchBar/quota.json
-  CODEX_QUOTA_LIMIT_ID     Rate limit id to read. Default: codex. Use * to accept all.
+  CODEX_QUOTA_SOURCE       auto, app-server, or sessions. Default: auto
+  CODEX_QUOTA_LIMIT_ID     Legacy limit id override for both quota windows.
+  CODEX_QUOTA_PRIMARY_LIMIT_ID
+                           Limit id for the 5-hour quota. Default: account primary quota.
+  CODEX_QUOTA_WEEKLY_LIMIT_ID
+                           Limit id for the weekly quota. Default: account weekly quota.
   CODEX_QUOTA_USE_FALLBACK=1
                            Read CODEX_QUOTA_FILE when no real Codex data is available.
+  CODEX_CLI_PATH           Codex CLI path. Default: PATH lookup, then /Applications/Codex.app/Contents/Resources/codex
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
   CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
@@ -46,6 +52,8 @@ from pathlib import Path
 import json
 import os
 import re
+import selectors
+import shutil
 import subprocess
 import sys
 
@@ -252,6 +260,7 @@ def accepted_limit_ids() -> set[str] | None:
 ACCEPTED_LIMIT_IDS = accepted_limit_ids()
 SESSION_SCAN_MAX_BYTES = 64 * 1024 * 1024
 SESSION_SCAN_CHUNK_BYTES = 1024 * 1024
+APP_SERVER_TIMEOUT_SECONDS = 5
 
 
 def accepts_rate_limit(raw: object) -> bool:
@@ -260,7 +269,7 @@ def accepts_rate_limit(raw: object) -> bool:
     if not isinstance(raw, dict):
         return False
 
-    limit_id = raw.get("limit_id")
+    limit_id = raw.get("limit_id", raw.get("limitId"))
     return isinstance(limit_id, str) and limit_id in ACCEPTED_LIMIT_IDS
 
 
@@ -269,11 +278,193 @@ def rate_window(raw: object) -> tuple[float, datetime] | None:
         return None
 
     try:
-        used_percent = float(raw["used_percent"])
-        resets_at = datetime.fromtimestamp(float(raw["resets_at"]), tz=timezone.utc).astimezone()
+        used_percent = float(raw.get("used_percent", raw.get("usedPercent")))
+        resets_at_raw = raw.get("resets_at", raw.get("resetsAt"))
+        resets_at = datetime.fromtimestamp(float(resets_at_raw), tz=timezone.utc).astimezone()
         return max(0.0, min(100.0, 100.0 - used_percent)), resets_at
     except Exception:
         return None
+
+
+def limit_id_of(snapshot: object) -> str | None:
+    if not isinstance(snapshot, dict):
+        return None
+    raw = snapshot.get("limit_id", snapshot.get("limitId"))
+    return raw if isinstance(raw, str) and raw else None
+
+
+def legacy_limit_id_override() -> str | None:
+    if "CODEX_QUOTA_LIMIT_ID" not in os.environ:
+        return None
+
+    raw = os.environ.get("CODEX_QUOTA_LIMIT_ID", "").strip()
+    if raw in {"", "*", "all", "auto"}:
+        return None
+    if "," in raw:
+        return None
+    return raw
+
+
+def configured_limit_id(env_name: str) -> str | None:
+    raw = os.environ.get(env_name)
+    if raw is None:
+        return None
+
+    value = raw.strip()
+    if value in {"", "*", "all", "auto"}:
+        return None
+    return value
+
+
+def codex_executable() -> str:
+    configured = os.environ.get("CODEX_CLI_PATH")
+    if configured and os.access(configured, os.X_OK):
+        return configured
+
+    found = shutil.which("codex")
+    if found:
+        return found
+
+    bundled = "/Applications/Codex.app/Contents/Resources/codex"
+    if os.access(bundled, os.X_OK):
+        return bundled
+
+    raise QuotaReadError("Cannot find Codex CLI. Set CODEX_CLI_PATH if Codex is installed elsewhere.")
+
+
+def app_server_request(method: str, params: object = None) -> dict:
+    executable = codex_executable()
+    try:
+        process = subprocess.Popen(
+            [executable, "app-server", "--stdio"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as error:
+        raise QuotaReadError(f"Cannot start Codex app-server: {error}") from error
+
+    try:
+        assert process.stdin is not None
+        assert process.stdout is not None
+        assert process.stderr is not None
+
+        requests = [
+            {
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "clientInfo": {"name": "codex-quota-touchbar", "version": "0.1.0"},
+                    "capabilities": None,
+                },
+            },
+            {"id": 2, "method": method},
+        ]
+        if params is not None:
+            requests[1]["params"] = params
+
+        for request in requests:
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+        process.stdin.flush()
+
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+
+        deadline = datetime.now().timestamp() + APP_SERVER_TIMEOUT_SECONDS
+        errors: list[str] = []
+        while datetime.now().timestamp() < deadline:
+            timeout = max(0.1, deadline - datetime.now().timestamp())
+            events = selector.select(timeout=timeout)
+            if not events and process.poll() is not None:
+                raise QuotaReadError(f"Codex app-server exited with status {process.returncode}")
+
+            for key, _ in events:
+                line = key.fileobj.readline()
+                if not line:
+                    if process.poll() is not None:
+                        raise QuotaReadError(f"Codex app-server exited with status {process.returncode}")
+                    continue
+
+                if key.data == "stderr":
+                    errors.append(line.strip())
+                    continue
+
+                try:
+                    message = json.loads(line)
+                except Exception:
+                    continue
+
+                if message.get("id") != 2:
+                    continue
+                if "error" in message:
+                    raise QuotaReadError(f"Codex app-server returned an error: {message['error']}")
+                result = message.get("result")
+                if not isinstance(result, dict):
+                    raise QuotaReadError("Codex app-server returned an invalid quota response")
+                return result
+
+        detail = f": {'; '.join(errors[-2:])}" if errors else ""
+        raise QuotaReadError(f"Timed out reading Codex app-server quota{detail}")
+    except (BrokenPipeError, OSError) as error:
+        raise QuotaReadError(f"Cannot communicate with Codex app-server: {error}") from error
+    finally:
+        try:
+            process.terminate()
+            process.wait(timeout=1)
+        except Exception:
+            try:
+                process.kill()
+            except Exception:
+                pass
+
+
+def snapshot_by_limit_id(snapshots: list[dict], limit_id: str) -> dict | None:
+    for snapshot in snapshots:
+        if limit_id_of(snapshot) == limit_id:
+            return snapshot
+    return None
+
+
+def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
+    payload = app_server_request("account/rateLimits/read")
+    default_snapshot = payload.get("rateLimits", payload.get("rate_limits"))
+    by_limit_id = payload.get("rateLimitsByLimitId", payload.get("rate_limits_by_limit_id")) or {}
+
+    snapshots: list[dict] = []
+    if isinstance(default_snapshot, dict):
+        snapshots.append(default_snapshot)
+    if isinstance(by_limit_id, dict):
+        for snapshot in by_limit_id.values():
+            if isinstance(snapshot, dict) and snapshot not in snapshots:
+                snapshots.append(snapshot)
+
+    if not snapshots:
+        raise QuotaReadError("Codex app-server returned no rate limit snapshots")
+
+    legacy_limit = legacy_limit_id_override()
+    primary_limit_id = configured_limit_id("CODEX_QUOTA_PRIMARY_LIMIT_ID") or legacy_limit
+    weekly_limit_id = configured_limit_id("CODEX_QUOTA_WEEKLY_LIMIT_ID") or legacy_limit
+
+    primary_snapshot = snapshot_by_limit_id(snapshots, primary_limit_id) if primary_limit_id else default_snapshot
+    weekly_snapshot = snapshot_by_limit_id(snapshots, weekly_limit_id) if weekly_limit_id else default_snapshot
+
+    if primary_limit_id and primary_snapshot is None:
+        raise QuotaReadError(f"Codex app-server quota response did not include limit id: {primary_limit_id}")
+    if weekly_limit_id and weekly_snapshot is None:
+        raise QuotaReadError(f"Codex app-server quota response did not include limit id: {weekly_limit_id}")
+
+    if primary_snapshot is None or weekly_snapshot is None:
+        raise QuotaReadError("Codex app-server quota response did not include usable snapshots")
+
+    primary = rate_window(primary_snapshot.get("primary"))
+    secondary = rate_window(weekly_snapshot.get("secondary"))
+    if primary is None or secondary is None:
+        raise QuotaReadError("Codex app-server quota response did not include both quota windows")
+
+    return primary[0], primary[1], secondary[0], secondary[1]
 
 
 def reversed_session_lines(path: Path):
@@ -374,6 +565,24 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
     return best_value
 
 
+def current_codex_rate_limits() -> tuple[float, datetime, float, datetime]:
+    source = os.environ.get("CODEX_QUOTA_SOURCE", "auto").strip().lower()
+
+    if source in {"session", "sessions", "logs", "jsonl"}:
+        return latest_codex_rate_limits()
+
+    if source in {"app", "app-server", "app_server"}:
+        return app_server_rate_limits()
+
+    if source not in {"", "auto"}:
+        raise QuotaReadError(f"Unsupported CODEX_QUOTA_SOURCE: {source}")
+
+    try:
+        return app_server_rate_limits()
+    except QuotaReadError:
+        return latest_codex_rate_limits()
+
+
 def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None]:
     if not quota_file.exists():
         return None, None, None, None
@@ -414,7 +623,7 @@ try:
         sys.exit(0)
 
     try:
-        five_hour, five_hour_reset, weekly, weekly_reset = latest_codex_rate_limits()
+        five_hour, five_hour_reset, weekly, weekly_reset = current_codex_rate_limits()
     except QuotaReadError:
         if os.environ.get("CODEX_QUOTA_USE_FALLBACK") != "1":
             raise
