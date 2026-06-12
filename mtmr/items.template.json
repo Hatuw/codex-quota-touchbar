@@ -26,7 +26,7 @@
     "align": "center",
     "width": 430,
     "bordered": true,
-    "refreshInterval": 600,
+    "refreshInterval": 60,
     "source": {
       "inline": "__CODEX_QUOTA_COMMAND__"
     }

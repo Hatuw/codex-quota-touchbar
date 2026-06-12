@@ -103,7 +103,7 @@ mtmr/items.template.json
 
 Useful settings:
 
-- `refreshInterval`: default `600`, meaning 10 minutes.
+- `refreshInterval`: default `60`, meaning 1 minute.
 - `width`: default `430`, the Touch Bar button width.
 - `CODEX_QUOTA_SOURCE`: default `auto`. Use `app-server` to require Codex app-server, or `sessions` to force session-log scanning.
 - `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the account primary quota.

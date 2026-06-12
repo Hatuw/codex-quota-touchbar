@@ -40,7 +40,7 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 中文 locale 会显示 `周`，其他 locale 会显示 `W`。
 如果想强制指定 label，可以在 inline command 中设置 `CODEX_QUOTA_WEEK_LABEL`。
 
-`↻` 按钮会在后台重启 MTMR，让额度组件立刻重绘，不用等待下一次 10 分钟自动刷新。
+`↻` 按钮会在后台重启 MTMR，让额度组件立刻重绘，不用等待下一次 1 分钟自动刷新。
 
 ## 数据来源
 

@@ -103,7 +103,7 @@ mtmr/items.template.json
 
 常用配置：
 
-- `refreshInterval`：默认 `600`，表示 10 分钟刷新一次。
+- `refreshInterval`：默认 `60`，表示 1 分钟刷新一次。
 - `width`：默认 `430`，表示 Touch Bar 按钮宽度。
 - `CODEX_QUOTA_SOURCE`：默认 `auto`。设置为 `app-server` 时只使用 Codex app-server，设置为 `sessions` 时强制扫描 session 日志。
 - `CODEX_QUOTA_PRIMARY_LIMIT_ID`：可选，用来指定 5 小时额度池。默认使用账号 primary 额度。
