@@ -115,6 +115,8 @@ mtmr/items.template.json
 - `CODEX_QUOTA_USE_FALLBACK`：默认关闭。设置为 `1` 时，如果没有真实 Codex 数据，会读取 `CODEX_QUOTA_FILE`。
 - `CODEX_CLI_PATH`：可选，用来指定 Codex CLI 路径。
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`：默认 `30`，表示读取 app-server 的等待秒数。
+- `CODEX_QUOTA_APP_SERVER_ATTEMPTS`：默认 `2`，表示显示错误前最多读取 app-server 的次数。
+- `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`：默认 `3`，表示两次 app-server 读取之间等待的秒数。
 - `CODEX_QUOTA_LOCALE`：可选，用来指定 label 判断用的 locale。默认读取系统 locale。
 - `CODEX_QUOTA_WEEK_LABEL`：可选，用来强制指定周额度 label。默认中文 locale 显示 `周`，其他 locale 显示 `W`。
 - `CODEX_QUOTA_BAR_SLOTS`：默认 `8`，控制血条长度。
@@ -183,6 +185,8 @@ CODEX_QUOTA_ALLOW_SESSION_FALLBACK=0
 CODEX_QUOTA_USE_FALLBACK=0
 CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
+CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
+CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
 CODEX_QUOTA_LOCALE=zh_CN
 CODEX_QUOTA_WEEK_LABEL=周
 CODEX_QUOTA_BAR_SLOTS=8
@@ -249,6 +253,8 @@ python3 -m json.tool mtmr/items.template.json >/dev/null
   CODEX_QUOTA_DEBUG=1 ./scripts/codex_quota_touchbar.sh compact-bar
   tail -f "$HOME/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log"
   ```
+
+  读取失败和重试详情即使没有开启 `CODEX_QUOTA_DEBUG`，也会写入同一个日志路径。
 
 如果组件显示错误，可能是 Codex app-server 不可用，或没有返回可用的额度数据。开始或继续一个 Codex session 后，点 `↻` 按钮，或重新运行 helper 检查。
 

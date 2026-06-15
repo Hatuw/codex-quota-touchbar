@@ -63,6 +63,8 @@ helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 - `CODEX_QUOTA_LIMIT_ID=...`：旧版兼容配置，会同时覆盖两个额度窗口。
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1`：app-server 失败时才允许使用 session 日志兜底。
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30`：调整读取 app-server 的等待秒数。
+- `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2`：重试瞬时 app-server 失败。
+- `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3`：调整重试间隔。
 
 只有明确想用 fallback JSON 测试时，才建议设置 `CODEX_QUOTA_USE_FALLBACK=1`。
 

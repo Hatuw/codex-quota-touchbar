@@ -36,6 +36,10 @@ Environment:
   CODEX_CLI_PATH           Codex CLI path. Default: PATH lookup, then /Applications/Codex.app/Contents/Resources/codex
   CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS
                            App-server read timeout. Default: 30
+  CODEX_QUOTA_APP_SERVER_ATTEMPTS
+                           App-server read attempts. Default: 2
+  CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS
+                           Delay before retrying app-server reads. Default: 3
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
   CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
@@ -60,6 +64,7 @@ import selectors
 import shutil
 import subprocess
 import sys
+import time
 
 
 sessions_dir = Path(sys.argv[1]).expanduser()
@@ -77,20 +82,25 @@ class QuotaReadError(Exception):
     pass
 
 
+def log_line(kind: str, message: str) -> None:
+    log_path = Path(os.environ.get("CODEX_QUOTA_DEBUG_LOG", "~/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log")).expanduser()
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        cleaned = " ".join(str(message).splitlines())
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{now}\t{display_mode}\t{kind}\t{cleaned}\n")
+    except Exception:
+        pass
+
+
 def emit(text: str) -> None:
     print(text)
 
     if os.environ.get("CODEX_QUOTA_DEBUG") != "1":
         return
 
-    debug_log = Path(os.environ.get("CODEX_QUOTA_DEBUG_LOG", "~/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log")).expanduser()
-    try:
-        debug_log.parent.mkdir(parents=True, exist_ok=True)
-        now = datetime.now().astimezone().isoformat(timespec="seconds")
-        with debug_log.open("a", encoding="utf-8") as handle:
-            handle.write(f"{now}\t{display_mode}\t{text}\n")
-    except Exception:
-        pass
+    log_line("output", text)
 
 
 def localized(chinese: str, english: str) -> str:
@@ -98,6 +108,7 @@ def localized(chinese: str, english: str) -> str:
 
 
 def emit_error(message: str) -> None:
+    log_line("error", message)
     title = localized("⚠ 额度读取失败", "⚠ quota error")
     compact_modes = {"compact-bar", "horizontal-bar", "compact"}
     if display_mode in compact_modes:
@@ -271,6 +282,17 @@ try:
     )
 except Exception:
     APP_SERVER_TIMEOUT_SECONDS = 30.0
+try:
+    APP_SERVER_ATTEMPTS = max(1, min(5, int(os.environ.get("CODEX_QUOTA_APP_SERVER_ATTEMPTS", "2"))))
+except Exception:
+    APP_SERVER_ATTEMPTS = 2
+try:
+    APP_SERVER_RETRY_DELAY_SECONDS = max(
+        0.0,
+        min(30.0, float(os.environ.get("CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS", "3"))),
+    )
+except Exception:
+    APP_SERVER_RETRY_DELAY_SECONDS = 3.0
 
 
 def accepts_rate_limit(raw: object) -> bool:
@@ -347,6 +369,26 @@ def codex_executable() -> str:
 
 
 def app_server_request(method: str, params: object = None) -> dict:
+    errors: list[str] = []
+    for attempt in range(1, APP_SERVER_ATTEMPTS + 1):
+        try:
+            return app_server_request_once(method, params)
+        except QuotaReadError as error:
+            message = str(error)
+            errors.append(message)
+            if attempt >= APP_SERVER_ATTEMPTS:
+                break
+            log_line("retry", f"Codex app-server attempt {attempt}/{APP_SERVER_ATTEMPTS} failed: {message}")
+            if APP_SERVER_RETRY_DELAY_SECONDS > 0:
+                time.sleep(APP_SERVER_RETRY_DELAY_SECONDS)
+
+    if len(errors) == 1:
+        raise QuotaReadError(errors[0])
+    summary = " | ".join(f"attempt {index + 1}: {error}" for index, error in enumerate(errors))
+    raise QuotaReadError(f"Codex app-server failed after {APP_SERVER_ATTEMPTS} attempts: {summary}")
+
+
+def app_server_request_once(method: str, params: object = None) -> dict:
     executable = codex_executable()
     try:
         process = subprocess.Popen(

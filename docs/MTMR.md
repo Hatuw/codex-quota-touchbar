@@ -63,6 +63,8 @@ To tune the source or limit ids, set these variables in the inline command:
 - `CODEX_QUOTA_LIMIT_ID=...` as a legacy override for both quota windows.
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1` to allow session logs if app-server fails.
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30` to tune the app-server read timeout.
+- `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2` to retry transient app-server failures.
+- `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3` to tune the retry delay.
 
 Set `CODEX_QUOTA_USE_FALLBACK=1` only when you intentionally want to test with the fallback JSON file.
 

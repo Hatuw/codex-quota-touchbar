@@ -115,6 +115,8 @@ Useful settings:
 - `CODEX_QUOTA_USE_FALLBACK`: default off. Set to `1` to read `CODEX_QUOTA_FILE` when no real Codex data is available.
 - `CODEX_CLI_PATH`: optional Codex CLI path override.
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`: default `30`, app-server read timeout.
+- `CODEX_QUOTA_APP_SERVER_ATTEMPTS`: default `2`, app-server read attempts before showing an error.
+- `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`: default `3`, delay between app-server attempts.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
 - `CODEX_QUOTA_BAR_SLOTS`: default `8`, controls bar length.
@@ -183,6 +185,8 @@ CODEX_QUOTA_ALLOW_SESSION_FALLBACK=0
 CODEX_QUOTA_USE_FALLBACK=0
 CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
+CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
+CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
 CODEX_QUOTA_BAR_SLOTS=8
@@ -249,6 +253,8 @@ If the widget does not update:
   CODEX_QUOTA_DEBUG=1 ./scripts/codex_quota_touchbar.sh compact-bar
   tail -f "$HOME/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log"
   ```
+
+  Error and retry details are written to the same log path even when `CODEX_QUOTA_DEBUG` is not enabled.
 
 If the widget shows an error, Codex app-server may be unavailable or did not return usable quota data. Start or continue a Codex session, tap the `↻` button, or run the helper again.
 
