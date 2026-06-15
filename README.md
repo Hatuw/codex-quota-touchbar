@@ -65,17 +65,19 @@ This is fresher than session logs and matches the quota data Codex Desktop uses 
 
 The helper displays:
 
-- 5-hour quota: the account primary quota from Codex's main `rateLimits` response.
+- 5-hour quota: the model-specific primary quota when Codex reports one, otherwise the account primary quota from the main `rateLimits` response.
 - Weekly quota: the account secondary quota from Codex's main `rateLimits` response.
 - Reset timestamps from each selected quota window.
 
-If Codex app-server is unavailable, the helper falls back to scanning the newest JSONL session files under:
+If Codex app-server is unavailable, the helper shows an error by default instead of keeping or reusing old quota data.
+You can still force session-log scanning with `CODEX_QUOTA_SOURCE=sessions`, or explicitly allow it as a fallback with `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1`.
+Session logs live under:
 
 ```text
 ~/.codex/sessions
 ```
 
-The session-log fallback looks for the latest event with `payload.rate_limits` and a matching `rate_limits.limit_id`.
+Session-log scanning looks for the latest event with `payload.rate_limits` and a matching `rate_limits.limit_id`.
 
 Displayed remaining quota is calculated as:
 
@@ -105,12 +107,14 @@ Useful settings:
 
 - `refreshInterval`: default `60`, meaning 1 minute.
 - `width`: default `430`, the Touch Bar button width.
-- `CODEX_QUOTA_SOURCE`: default `auto`. Use `app-server` to require Codex app-server, or `sessions` to force session-log scanning.
-- `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the account primary quota.
+- `CODEX_QUOTA_SOURCE`: default `auto`. It reads Codex app-server and shows an error if app-server fails. Use `sessions` to force session-log scanning.
+- `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the model-specific primary quota when Codex reports one, otherwise the account primary quota.
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID`: optional weekly quota limit id. Default is the account weekly quota.
 - `CODEX_QUOTA_LIMIT_ID`: legacy override for both quota windows. Use this only when you want one limit id for both 5-hour and weekly quota.
+- `CODEX_QUOTA_ALLOW_SESSION_FALLBACK`: default off. Set to `1` if you prefer session-log data when app-server is temporarily unavailable.
 - `CODEX_QUOTA_USE_FALLBACK`: default off. Set to `1` to read `CODEX_QUOTA_FILE` when no real Codex data is available.
 - `CODEX_CLI_PATH`: optional Codex CLI path override.
+- `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`: default `30`, app-server read timeout.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
 - `CODEX_QUOTA_BAR_SLOTS`: default `8`, controls bar length.
@@ -175,8 +179,10 @@ CODEX_QUOTA_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/quota.jso
 CODEX_QUOTA_SOURCE=auto
 CODEX_QUOTA_PRIMARY_LIMIT_ID=auto
 CODEX_QUOTA_WEEKLY_LIMIT_ID=codex
+CODEX_QUOTA_ALLOW_SESSION_FALLBACK=0
 CODEX_QUOTA_USE_FALLBACK=0
 CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
+CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
 CODEX_QUOTA_BAR_SLOTS=8
@@ -244,11 +250,11 @@ If the widget does not update:
   tail -f "$HOME/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log"
   ```
 
-If the widget shows an error, Codex app-server may be unavailable and no fallback session data was found. Start or continue a Codex session, tap the `↻` button, or run the helper again.
+If the widget shows an error, Codex app-server may be unavailable or did not return usable quota data. Start or continue a Codex session, tap the `↻` button, or run the helper again.
 
 ## Limitations
 
-- This uses Codex's local app-server when available and local session logs as a fallback; it does not call a public official quota API directly.
+- This uses Codex's local app-server by default. Session logs are available as an explicit fallback; the helper does not call a public official quota API directly.
 - MTMR renders a text-based Touch Bar widget, not a native AppKit progress view.
 - The native AppKit Touch Bar item only appears while the app is active.
 

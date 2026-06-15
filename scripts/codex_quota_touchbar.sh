@@ -26,12 +26,16 @@ Environment:
   CODEX_QUOTA_SOURCE       auto, app-server, or sessions. Default: auto
   CODEX_QUOTA_LIMIT_ID     Legacy limit id override for both quota windows.
   CODEX_QUOTA_PRIMARY_LIMIT_ID
-                           Limit id for the 5-hour quota. Default: account primary quota.
+                           Limit id for the 5-hour quota. Default: model primary quota when Codex reports one, then account primary quota.
   CODEX_QUOTA_WEEKLY_LIMIT_ID
                            Limit id for the weekly quota. Default: account weekly quota.
+  CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1
+                           Fall back to session logs if app-server fails. Default: off.
   CODEX_QUOTA_USE_FALLBACK=1
                            Read CODEX_QUOTA_FILE when no real Codex data is available.
   CODEX_CLI_PATH           Codex CLI path. Default: PATH lookup, then /Applications/Codex.app/Contents/Resources/codex
+  CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS
+                           App-server read timeout. Default: 30
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
   CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
@@ -260,7 +264,13 @@ def accepted_limit_ids() -> set[str] | None:
 ACCEPTED_LIMIT_IDS = accepted_limit_ids()
 SESSION_SCAN_MAX_BYTES = 64 * 1024 * 1024
 SESSION_SCAN_CHUNK_BYTES = 1024 * 1024
-APP_SERVER_TIMEOUT_SECONDS = 5
+try:
+    APP_SERVER_TIMEOUT_SECONDS = max(
+        2.0,
+        min(60.0, float(os.environ.get("CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS", "30"))),
+    )
+except Exception:
+    APP_SERVER_TIMEOUT_SECONDS = 30.0
 
 
 def accepts_rate_limit(raw: object) -> bool:
@@ -293,6 +303,13 @@ def limit_id_of(snapshot: object) -> str | None:
     return raw if isinstance(raw, str) and raw else None
 
 
+def limit_name_of(snapshot: object) -> str | None:
+    if not isinstance(snapshot, dict):
+        return None
+    raw = snapshot.get("limit_name", snapshot.get("limitName"))
+    return raw if isinstance(raw, str) and raw else None
+
+
 def legacy_limit_id_override() -> str | None:
     if "CODEX_QUOTA_LIMIT_ID" not in os.environ:
         return None
@@ -314,6 +331,10 @@ def configured_limit_id(env_name: str) -> str | None:
     if value in {"", "*", "all", "auto"}:
         return None
     return value
+
+
+def env_flag(env_name: str) -> bool:
+    return os.environ.get(env_name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def codex_executable() -> str:
@@ -428,6 +449,25 @@ def snapshot_by_limit_id(snapshots: list[dict], limit_id: str) -> dict | None:
     return None
 
 
+def preferred_primary_snapshot(snapshots: list[dict]) -> dict | None:
+    candidates = []
+    for snapshot in snapshots:
+        limit_id = limit_id_of(snapshot)
+        if not limit_id or limit_id == "codex":
+            continue
+        if rate_window(snapshot.get("primary")) is None:
+            continue
+        candidates.append(snapshot)
+
+    if not candidates:
+        return None
+
+    for snapshot in candidates:
+        if limit_name_of(snapshot):
+            return snapshot
+    return candidates[0]
+
+
 def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
     payload = app_server_request("account/rateLimits/read")
     default_snapshot = payload.get("rateLimits", payload.get("rate_limits"))
@@ -444,12 +484,17 @@ def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
     if not snapshots:
         raise QuotaReadError("Codex app-server returned no rate limit snapshots")
 
+    account_snapshot = default_snapshot if isinstance(default_snapshot, dict) else snapshot_by_limit_id(snapshots, "codex")
     legacy_limit = legacy_limit_id_override()
     primary_limit_id = configured_limit_id("CODEX_QUOTA_PRIMARY_LIMIT_ID") or legacy_limit
     weekly_limit_id = configured_limit_id("CODEX_QUOTA_WEEKLY_LIMIT_ID") or legacy_limit
 
-    primary_snapshot = snapshot_by_limit_id(snapshots, primary_limit_id) if primary_limit_id else default_snapshot
-    weekly_snapshot = snapshot_by_limit_id(snapshots, weekly_limit_id) if weekly_limit_id else default_snapshot
+    primary_snapshot = (
+        snapshot_by_limit_id(snapshots, primary_limit_id)
+        if primary_limit_id
+        else preferred_primary_snapshot(snapshots) or account_snapshot
+    )
+    weekly_snapshot = snapshot_by_limit_id(snapshots, weekly_limit_id) if weekly_limit_id else account_snapshot
 
     if primary_limit_id and primary_snapshot is None:
         raise QuotaReadError(f"Codex app-server quota response did not include limit id: {primary_limit_id}")
@@ -580,7 +625,9 @@ def current_codex_rate_limits() -> tuple[float, datetime, float, datetime]:
     try:
         return app_server_rate_limits()
     except QuotaReadError:
-        return latest_codex_rate_limits()
+        if env_flag("CODEX_QUOTA_ALLOW_SESSION_FALLBACK"):
+            return latest_codex_rate_limits()
+        raise
 
 
 def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None]:
@@ -625,7 +672,7 @@ try:
     try:
         five_hour, five_hour_reset, weekly, weekly_reset = current_codex_rate_limits()
     except QuotaReadError:
-        if os.environ.get("CODEX_QUOTA_USE_FALLBACK") != "1":
+        if not env_flag("CODEX_QUOTA_USE_FALLBACK"):
             raise
         five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
         if five_hour is None or weekly is None:
