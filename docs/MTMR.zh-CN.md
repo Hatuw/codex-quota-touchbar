@@ -50,9 +50,10 @@ helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 5 小时额度默认使用 Codex 主 `rateLimits` 返回里的账号 primary 额度。
 周额度默认使用 Codex 主 `rateLimits` 返回里的账号 secondary 额度。
 
-如果 app-server 不可用，helper 默认会显示错误，不会继续保留或复用旧额度。
+如果 app-server 短暂不可用，helper 会先显示上一次成功读取的额度，避免偶发错误打断 Touch Bar。
+如果连续多次刷新都失败，才会显示错误，避免一直保留过旧数据。
 你可以用 `CODEX_QUOTA_SOURCE=sessions` 强制扫描本地 Codex session 文件，或用 `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1` 显式允许它作为兜底。
-如果没有找到匹配的额度数据，组件会显示错误，不会继续保留旧额度。
+如果没有找到匹配的额度数据，也没有上一次成功缓存，组件会显示错误。
 
 如果需要调整数据源或额度池，可以在 inline command 中设置：
 
@@ -65,6 +66,7 @@ helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30`：调整读取 app-server 的等待秒数。
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2`：重试瞬时 app-server 失败。
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3`：调整重试间隔。
+- `CODEX_QUOTA_STALE_ERROR_THRESHOLD=3`：调整连续失败多少次后才停止使用缓存额度。
 
 只有明确想用 fallback JSON 测试时，才建议设置 `CODEX_QUOTA_USE_FALLBACK=1`。
 

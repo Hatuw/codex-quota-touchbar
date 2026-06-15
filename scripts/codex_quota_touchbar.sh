@@ -23,6 +23,7 @@ Modes:
 Environment:
   CODEX_SESSIONS_DIR       Codex sessions directory. Default: ~/.codex/sessions
   CODEX_QUOTA_FILE         Fallback JSON file. Default: ~/Library/Application Support/CodexQuotaTouchBar/quota.json
+  CODEX_QUOTA_CACHE_FILE   Last successful real quota cache. Default: ~/Library/Application Support/CodexQuotaTouchBar/last-success.json
   CODEX_QUOTA_SOURCE       auto, app-server, or sessions. Default: auto
   CODEX_QUOTA_LIMIT_ID     Legacy limit id override for both quota windows.
   CODEX_QUOTA_PRIMARY_LIMIT_ID
@@ -40,6 +41,8 @@ Environment:
                            App-server read attempts. Default: 2
   CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS
                            Delay before retrying app-server reads. Default: 3
+  CODEX_QUOTA_STALE_ERROR_THRESHOLD
+                           Consecutive failed refreshes before showing an error. Default: 3
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
   CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
@@ -69,6 +72,7 @@ import time
 
 sessions_dir = Path(sys.argv[1]).expanduser()
 quota_file = Path(sys.argv[2]).expanduser()
+cache_file = Path(os.environ.get("CODEX_QUOTA_CACHE_FILE", "~/Library/Application Support/CodexQuotaTouchBar/last-success.json")).expanduser()
 display_mode = sys.argv[3] if len(sys.argv) > 3 else "multiline"
 
 ANSI_RESET = "\033[0m"
@@ -126,6 +130,12 @@ def parse_date(raw: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized).astimezone()
     except Exception:
         return None
+
+
+def date_to_text(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone().isoformat(timespec="seconds")
 
 
 def format_time(value: datetime | None) -> str:
@@ -293,6 +303,10 @@ try:
     )
 except Exception:
     APP_SERVER_RETRY_DELAY_SECONDS = 3.0
+try:
+    STALE_ERROR_THRESHOLD = max(1, min(60, int(os.environ.get("CODEX_QUOTA_STALE_ERROR_THRESHOLD", "3"))))
+except Exception:
+    STALE_ERROR_THRESHOLD = 3
 
 
 def accepts_rate_limit(raw: object) -> bool:
@@ -642,6 +656,76 @@ def current_codex_rate_limits() -> tuple[float, datetime, float, datetime]:
         raise
 
 
+def write_json_file(path: Path, payload: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_name(f"{path.name}.tmp")
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        temp_path.replace(path)
+    except Exception as error:
+        log_line("cache-error", f"Cannot write quota cache {path}: {error}")
+
+
+def write_success_cache(
+    five_hour: float,
+    five_hour_reset: datetime | None,
+    weekly: float,
+    weekly_reset: datetime | None,
+) -> None:
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    write_json_file(
+        cache_file,
+        {
+            "fiveHourRemainingPercent": float(five_hour),
+            "fiveHourResetAt": date_to_text(five_hour_reset),
+            "weeklyRemainingPercent": float(weekly),
+            "weeklyResetAt": date_to_text(weekly_reset),
+            "refreshedAt": now,
+            "consecutiveFailures": 0,
+        },
+    )
+
+
+def read_cache_payload() -> dict | None:
+    try:
+        payload = json.loads(cache_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, datetime | None, float, datetime | None]:
+    payload = read_cache_payload()
+    if payload is None:
+        raise error
+
+    try:
+        failures = int(payload.get("consecutiveFailures", 0)) + 1
+    except Exception:
+        failures = 1
+
+    payload["consecutiveFailures"] = failures
+    payload["lastErrorAt"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    payload["lastError"] = str(error)
+    write_json_file(cache_file, payload)
+
+    if failures >= STALE_ERROR_THRESHOLD:
+        raise QuotaReadError(
+            f"{error} (showing error after {failures} consecutive failed refreshes; cached quota is at {cache_file})"
+        )
+
+    five_hour = payload.get("fiveHourRemainingPercent", payload.get("five_hour_remaining_percent"))
+    weekly = payload.get("weeklyRemainingPercent", payload.get("weekly_remaining_percent"))
+    five_hour_reset = parse_date(payload.get("fiveHourResetAt", payload.get("five_hour_reset_at")))
+    weekly_reset = parse_date(payload.get("weeklyResetAt", payload.get("weekly_reset_at")))
+
+    if five_hour is None or weekly is None:
+        raise error
+
+    log_line("stale", f"Using cached quota after failed refresh {failures}/{STALE_ERROR_THRESHOLD}: {error}")
+    return float(five_hour), five_hour_reset, float(weekly), weekly_reset
+
+
 def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None]:
     if not quota_file.exists():
         return None, None, None, None
@@ -683,12 +767,16 @@ try:
 
     try:
         five_hour, five_hour_reset, weekly, weekly_reset = current_codex_rate_limits()
-    except QuotaReadError:
-        if not env_flag("CODEX_QUOTA_USE_FALLBACK"):
-            raise
-        five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
-        if five_hour is None or weekly is None:
-            raise QuotaReadError(f"Fallback quota file is missing or invalid: {quota_file}")
+        write_success_cache(five_hour, five_hour_reset, weekly, weekly_reset)
+    except QuotaReadError as error:
+        try:
+            five_hour, five_hour_reset, weekly, weekly_reset = cached_rate_limits_after_error(error)
+        except QuotaReadError:
+            if not env_flag("CODEX_QUOTA_USE_FALLBACK"):
+                raise
+            five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
+            if five_hour is None or weekly is None:
+                raise QuotaReadError(f"Fallback quota file is missing or invalid: {quota_file}")
 
     weekly_quota_label = weekly_label()
 

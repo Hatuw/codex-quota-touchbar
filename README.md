@@ -69,7 +69,8 @@ The helper displays:
 - Weekly quota: the account secondary quota from Codex's main `rateLimits` response.
 - Reset timestamps from each selected quota window.
 
-If Codex app-server is unavailable, the helper shows an error by default instead of keeping or reusing old quota data.
+If Codex app-server is temporarily unavailable, the helper shows the last successful quota for short glitches.
+After repeated failed refreshes, it shows an error instead of keeping stale data forever.
 You can still force session-log scanning with `CODEX_QUOTA_SOURCE=sessions`, or explicitly allow it as a fallback with `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1`.
 Session logs live under:
 
@@ -85,7 +86,7 @@ Displayed remaining quota is calculated as:
 remaining = 100 - used_percent
 ```
 
-If no Codex rate limit event is found, the helper shows an error instead of keeping an old quota on screen.
+If no Codex rate limit event or last-success cache is found, the helper shows an error.
 
 For local testing only, you can opt into the fallback JSON file by setting `CODEX_QUOTA_USE_FALLBACK=1`:
 
@@ -107,7 +108,8 @@ Useful settings:
 
 - `refreshInterval`: default `60`, meaning 1 minute.
 - `width`: default `430`, the Touch Bar button width.
-- `CODEX_QUOTA_SOURCE`: default `auto`. It reads Codex app-server and shows an error if app-server fails. Use `sessions` to force session-log scanning.
+- `CODEX_QUOTA_CACHE_FILE`: optional last-success cache path. Default is `~/Library/Application Support/CodexQuotaTouchBar/last-success.json`.
+- `CODEX_QUOTA_SOURCE`: default `auto`. It reads Codex app-server and uses the last successful quota for short glitches. Use `sessions` to force session-log scanning.
 - `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the account primary quota.
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID`: optional weekly quota limit id. Default is the account weekly quota.
 - `CODEX_QUOTA_LIMIT_ID`: legacy override for both quota windows. Use this only when you want one limit id for both 5-hour and weekly quota.
@@ -117,6 +119,7 @@ Useful settings:
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`: default `30`, app-server read timeout.
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS`: default `2`, app-server read attempts before showing an error.
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`: default `3`, delay between app-server attempts.
+- `CODEX_QUOTA_STALE_ERROR_THRESHOLD`: default `3`, consecutive failed refreshes before showing an error instead of cached quota.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
 - `CODEX_QUOTA_BAR_SLOTS`: default `8`, controls bar length.
@@ -178,6 +181,7 @@ Useful environment variables:
 ```bash
 CODEX_SESSIONS_DIR="$HOME/.codex/sessions"
 CODEX_QUOTA_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/quota.json"
+CODEX_QUOTA_CACHE_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/last-success.json"
 CODEX_QUOTA_SOURCE=auto
 CODEX_QUOTA_PRIMARY_LIMIT_ID=auto
 CODEX_QUOTA_WEEKLY_LIMIT_ID=codex
@@ -187,6 +191,7 @@ CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
 CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
 CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
+CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
 CODEX_QUOTA_BAR_SLOTS=8
@@ -256,7 +261,7 @@ If the widget does not update:
 
   Error and retry details are written to the same log path even when `CODEX_QUOTA_DEBUG` is not enabled.
 
-If the widget shows an error, Codex app-server may be unavailable or did not return usable quota data. Start or continue a Codex session, tap the `↻` button, or run the helper again.
+If the widget shows an error, Codex app-server likely failed for several consecutive refreshes or did not return usable quota data. Start or continue a Codex session, tap the `↻` button, or run the helper again.
 
 ## Limitations
 

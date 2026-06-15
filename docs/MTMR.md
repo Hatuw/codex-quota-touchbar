@@ -50,9 +50,10 @@ This usually matches the quota data shown by Codex Desktop more closely than ses
 The 5-hour quota uses the account primary quota from Codex's main `rateLimits` response.
 The weekly quota uses the account secondary quota from Codex's main `rateLimits` response.
 
-If app-server is unavailable, the helper shows an error by default instead of keeping or reusing old quota data.
+If app-server is temporarily unavailable, the helper shows the last successful quota for short glitches.
+After repeated failed refreshes, it shows an error instead of keeping stale data forever.
 You can force local Codex session scanning with `CODEX_QUOTA_SOURCE=sessions`, or explicitly allow it as a fallback with `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1`.
-If no matching quota data is found, the widget shows an error rather than keeping an old value on screen.
+If no matching quota data or last-success cache is found, the widget shows an error.
 
 To tune the source or limit ids, set these variables in the inline command:
 
@@ -65,6 +66,7 @@ To tune the source or limit ids, set these variables in the inline command:
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30` to tune the app-server read timeout.
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2` to retry transient app-server failures.
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3` to tune the retry delay.
+- `CODEX_QUOTA_STALE_ERROR_THRESHOLD=3` to tune how many consecutive failed refreshes may use cached quota.
 
 Set `CODEX_QUOTA_USE_FALLBACK=1` only when you intentionally want to test with the fallback JSON file.
 

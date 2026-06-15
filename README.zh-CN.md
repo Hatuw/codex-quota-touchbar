@@ -69,7 +69,8 @@
 - 周额度：Codex 主 `rateLimits` 返回里的账号 secondary 额度。
 - 刷新/重置时间：分别来自对应额度窗口的 `resets_at`。
 
-如果 Codex app-server 不可用，helper 默认会显示错误，不会继续保留或复用旧额度。
+如果 Codex app-server 短暂不可用，helper 会先显示上一次成功读取的额度，避免偶发错误打断 Touch Bar。
+如果连续多次刷新都失败，才会显示错误，避免一直保留过旧数据。
 你仍然可以用 `CODEX_QUOTA_SOURCE=sessions` 强制扫描 session 日志，或用 `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1` 显式允许它作为兜底。
 session 日志路径是：
 
@@ -85,7 +86,7 @@ session 日志扫描会寻找最新的 `payload.rate_limits` 事件，并匹配�
 remaining = 100 - used_percent
 ```
 
-如果没有找到 Codex 的 rate limit 记录，脚本会显示错误，不会继续显示旧额度。
+如果没有找到 Codex 的 rate limit 记录，也没有上一次成功缓存，脚本会显示错误。
 
 只有本地测试时才建议显式开启 fallback JSON，设置 `CODEX_QUOTA_USE_FALLBACK=1` 后会读取：
 
@@ -107,7 +108,8 @@ mtmr/items.template.json
 
 - `refreshInterval`：默认 `60`，表示 1 分钟刷新一次。
 - `width`：默认 `430`，表示 Touch Bar 按钮宽度。
-- `CODEX_QUOTA_SOURCE`：默认 `auto`。默认读取 Codex app-server，如果 app-server 失败则显示错误。设置为 `sessions` 时强制扫描 session 日志。
+- `CODEX_QUOTA_CACHE_FILE`：可选，用来指定最近一次成功额度的缓存路径。默认是 `~/Library/Application Support/CodexQuotaTouchBar/last-success.json`。
+- `CODEX_QUOTA_SOURCE`：默认 `auto`。默认读取 Codex app-server，短暂失败时使用上一次成功额度。设置为 `sessions` 时强制扫描 session 日志。
 - `CODEX_QUOTA_PRIMARY_LIMIT_ID`：可选，用来指定 5 小时额度池。默认使用账号 primary 额度。
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID`：可选，用来指定周额度池。默认使用账号 weekly 额度。
 - `CODEX_QUOTA_LIMIT_ID`：旧版兼容配置，会同时覆盖 5 小时额度和周额度。只有你想让两个额度都来自同一个 limit id 时才建议使用。
@@ -117,6 +119,7 @@ mtmr/items.template.json
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`：默认 `30`，表示读取 app-server 的等待秒数。
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS`：默认 `2`，表示显示错误前最多读取 app-server 的次数。
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`：默认 `3`，表示两次 app-server 读取之间等待的秒数。
+- `CODEX_QUOTA_STALE_ERROR_THRESHOLD`：默认 `3`，表示连续失败多少次后才显示错误，不再显示缓存额度。
 - `CODEX_QUOTA_LOCALE`：可选，用来指定 label 判断用的 locale。默认读取系统 locale。
 - `CODEX_QUOTA_WEEK_LABEL`：可选，用来强制指定周额度 label。默认中文 locale 显示 `周`，其他 locale 显示 `W`。
 - `CODEX_QUOTA_BAR_SLOTS`：默认 `8`，控制血条长度。
@@ -178,6 +181,7 @@ mtmr/items.template.json
 ```bash
 CODEX_SESSIONS_DIR="$HOME/.codex/sessions"
 CODEX_QUOTA_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/quota.json"
+CODEX_QUOTA_CACHE_FILE="$HOME/Library/Application Support/CodexQuotaTouchBar/last-success.json"
 CODEX_QUOTA_SOURCE=auto
 CODEX_QUOTA_PRIMARY_LIMIT_ID=auto
 CODEX_QUOTA_WEEKLY_LIMIT_ID=codex
@@ -187,6 +191,7 @@ CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
 CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
 CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
+CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=zh_CN
 CODEX_QUOTA_WEEK_LABEL=周
 CODEX_QUOTA_BAR_SLOTS=8
@@ -256,7 +261,7 @@ python3 -m json.tool mtmr/items.template.json >/dev/null
 
   读取失败和重试详情即使没有开启 `CODEX_QUOTA_DEBUG`，也会写入同一个日志路径。
 
-如果组件显示错误，可能是 Codex app-server 不可用，或没有返回可用的额度数据。开始或继续一个 Codex session 后，点 `↻` 按钮，或重新运行 helper 检查。
+如果组件显示错误，通常表示 Codex app-server 已经连续多次失败，或没有返回可用的额度数据。开始或继续一个 Codex session 后，点 `↻` 按钮，或重新运行 helper 检查。
 
 ## 限制
 
