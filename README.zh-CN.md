@@ -65,7 +65,7 @@
 
 组件默认显示：
 
-- 5 小时额度：优先使用 Codex 返回的模型 primary 额度；如果没有模型额度，则使用主 `rateLimits` 里的账号 primary 额度。
+- 5 小时额度：Codex 主 `rateLimits` 返回里的账号 primary 额度。
 - 周额度：Codex 主 `rateLimits` 返回里的账号 secondary 额度。
 - 刷新/重置时间：分别来自对应额度窗口的 `resets_at`。
 
@@ -108,7 +108,7 @@ mtmr/items.template.json
 - `refreshInterval`：默认 `60`，表示 1 分钟刷新一次。
 - `width`：默认 `430`，表示 Touch Bar 按钮宽度。
 - `CODEX_QUOTA_SOURCE`：默认 `auto`。默认读取 Codex app-server，如果 app-server 失败则显示错误。设置为 `sessions` 时强制扫描 session 日志。
-- `CODEX_QUOTA_PRIMARY_LIMIT_ID`：可选，用来指定 5 小时额度池。默认优先使用 Codex 返回的模型 primary 额度；如果没有模型额度，则使用账号 primary 额度。
+- `CODEX_QUOTA_PRIMARY_LIMIT_ID`：可选，用来指定 5 小时额度池。默认使用账号 primary 额度。
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID`：可选，用来指定周额度池。默认使用账号 weekly 额度。
 - `CODEX_QUOTA_LIMIT_ID`：旧版兼容配置，会同时覆盖 5 小时额度和周额度。只有你想让两个额度都来自同一个 limit id 时才建议使用。
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK`：默认关闭。设置为 `1` 后，app-server 暂时不可用时才会用 session 日志兜底。

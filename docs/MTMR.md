@@ -47,7 +47,7 @@ The `↻` button restarts MTMR in the background so the quota widget redraws imm
 The helper reads `account/rateLimits/read` from the local Codex app-server by default.
 This usually matches the quota data shown by Codex Desktop more closely than session logs.
 
-The 5-hour quota uses the model-specific primary quota when Codex reports one, otherwise it uses the account primary quota from Codex's main `rateLimits` response.
+The 5-hour quota uses the account primary quota from Codex's main `rateLimits` response.
 The weekly quota uses the account secondary quota from Codex's main `rateLimits` response.
 
 If app-server is unavailable, the helper shows an error by default instead of keeping or reusing old quota data.

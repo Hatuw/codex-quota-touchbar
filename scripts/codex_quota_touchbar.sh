@@ -26,7 +26,7 @@ Environment:
   CODEX_QUOTA_SOURCE       auto, app-server, or sessions. Default: auto
   CODEX_QUOTA_LIMIT_ID     Legacy limit id override for both quota windows.
   CODEX_QUOTA_PRIMARY_LIMIT_ID
-                           Limit id for the 5-hour quota. Default: model primary quota when Codex reports one, then account primary quota.
+                           Limit id for the 5-hour quota. Default: account primary quota.
   CODEX_QUOTA_WEEKLY_LIMIT_ID
                            Limit id for the weekly quota. Default: account weekly quota.
   CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1
@@ -303,13 +303,6 @@ def limit_id_of(snapshot: object) -> str | None:
     return raw if isinstance(raw, str) and raw else None
 
 
-def limit_name_of(snapshot: object) -> str | None:
-    if not isinstance(snapshot, dict):
-        return None
-    raw = snapshot.get("limit_name", snapshot.get("limitName"))
-    return raw if isinstance(raw, str) and raw else None
-
-
 def legacy_limit_id_override() -> str | None:
     if "CODEX_QUOTA_LIMIT_ID" not in os.environ:
         return None
@@ -449,25 +442,6 @@ def snapshot_by_limit_id(snapshots: list[dict], limit_id: str) -> dict | None:
     return None
 
 
-def preferred_primary_snapshot(snapshots: list[dict]) -> dict | None:
-    candidates = []
-    for snapshot in snapshots:
-        limit_id = limit_id_of(snapshot)
-        if not limit_id or limit_id == "codex":
-            continue
-        if rate_window(snapshot.get("primary")) is None:
-            continue
-        candidates.append(snapshot)
-
-    if not candidates:
-        return None
-
-    for snapshot in candidates:
-        if limit_name_of(snapshot):
-            return snapshot
-    return candidates[0]
-
-
 def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
     payload = app_server_request("account/rateLimits/read")
     default_snapshot = payload.get("rateLimits", payload.get("rate_limits"))
@@ -489,11 +463,7 @@ def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
     primary_limit_id = configured_limit_id("CODEX_QUOTA_PRIMARY_LIMIT_ID") or legacy_limit
     weekly_limit_id = configured_limit_id("CODEX_QUOTA_WEEKLY_LIMIT_ID") or legacy_limit
 
-    primary_snapshot = (
-        snapshot_by_limit_id(snapshots, primary_limit_id)
-        if primary_limit_id
-        else preferred_primary_snapshot(snapshots) or account_snapshot
-    )
+    primary_snapshot = snapshot_by_limit_id(snapshots, primary_limit_id) if primary_limit_id else account_snapshot
     weekly_snapshot = snapshot_by_limit_id(snapshots, weekly_limit_id) if weekly_limit_id else account_snapshot
 
     if primary_limit_id and primary_snapshot is None:

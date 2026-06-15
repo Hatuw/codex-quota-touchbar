@@ -47,7 +47,7 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 这个数据通常比 session 日志更新，也更接近 Codex Desktop 自己显示的额度。
 
-5 小时额度默认优先使用 Codex 返回的模型 primary 额度；如果没有模型额度，则使用主 `rateLimits` 里的账号 primary 额度。
+5 小时额度默认使用 Codex 主 `rateLimits` 返回里的账号 primary 额度。
 周额度默认使用 Codex 主 `rateLimits` 返回里的账号 secondary 额度。
 
 如果 app-server 不可用，helper 默认会显示错误，不会继续保留或复用旧额度。

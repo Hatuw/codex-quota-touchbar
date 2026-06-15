@@ -65,7 +65,7 @@ This is fresher than session logs and matches the quota data Codex Desktop uses 
 
 The helper displays:
 
-- 5-hour quota: the model-specific primary quota when Codex reports one, otherwise the account primary quota from the main `rateLimits` response.
+- 5-hour quota: the account primary quota from Codex's main `rateLimits` response.
 - Weekly quota: the account secondary quota from Codex's main `rateLimits` response.
 - Reset timestamps from each selected quota window.
 
@@ -108,7 +108,7 @@ Useful settings:
 - `refreshInterval`: default `60`, meaning 1 minute.
 - `width`: default `430`, the Touch Bar button width.
 - `CODEX_QUOTA_SOURCE`: default `auto`. It reads Codex app-server and shows an error if app-server fails. Use `sessions` to force session-log scanning.
-- `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the model-specific primary quota when Codex reports one, otherwise the account primary quota.
+- `CODEX_QUOTA_PRIMARY_LIMIT_ID`: optional 5-hour quota limit id. Default is the account primary quota.
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID`: optional weekly quota limit id. Default is the account weekly quota.
 - `CODEX_QUOTA_LIMIT_ID`: legacy override for both quota windows. Use this only when you want one limit id for both 5-hour and weekly quota.
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK`: default off. Set to `1` if you prefer session-log data when app-server is temporarily unavailable.
