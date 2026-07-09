@@ -45,7 +45,7 @@ Environment:
                            Consecutive failed refreshes before showing an error. Default: 3
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
   CODEX_QUOTA_WEEK_LABEL   Weekly quota label override. Default: localized Chinese label for Chinese locales, W otherwise.
-  CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 8
+  CODEX_QUOTA_BAR_SLOTS    Bar length for compact-bar. Default: 6
   CODEX_QUOTA_DEBUG=1      Log refreshes to ~/Library/Logs/CodexQuotaTouchBar/mtmr-refresh.log
 USAGE
   exit 0
@@ -166,6 +166,16 @@ def round_percent(value: object) -> str:
         return "--"
 
 
+def non_negative_int(value: object) -> int | None:
+    if value is None:
+        return None
+
+    try:
+        return max(0, int(float(value)))
+    except Exception:
+        return None
+
+
 def percent_number(value: object) -> float | None:
     try:
         return max(0.0, min(100.0, float(value)))
@@ -190,6 +200,15 @@ def colored_percent(value: object) -> str:
 
 def colored_label(label: str, value: object) -> str:
     return f"{quota_color(value)}{label}{ANSI_RESET}"
+
+
+def reset_credits_text(value: object) -> str:
+    count = non_negative_int(value)
+    if count is None:
+        return ""
+
+    color = ANSI_GREEN if count > 0 else ANSI_RED
+    return f" {color}🎟️×{count}{ANSI_RESET}"
 
 
 def first_locale(raw: str | None) -> str | None:
@@ -269,9 +288,9 @@ def progress_bar(value: object, slots: int = 10, cell: str = "▬") -> str:
 
 def compact_bar_slots() -> int:
     try:
-        return max(3, min(30, int(os.environ.get("CODEX_QUOTA_BAR_SLOTS", "8"))))
+        return max(3, min(30, int(os.environ.get("CODEX_QUOTA_BAR_SLOTS", "6"))))
     except Exception:
-        return 8
+        return 6
 
 
 def accepted_limit_ids() -> set[str] | None:
@@ -330,6 +349,39 @@ def rate_window(raw: object) -> tuple[float, datetime] | None:
         return max(0.0, min(100.0, 100.0 - used_percent)), resets_at
     except Exception:
         return None
+
+
+def reset_credits_available_count(payload: object) -> int | None:
+    if not isinstance(payload, dict):
+        return None
+
+    candidate_groups = [
+        payload.get("rateLimitResetCredits"),
+        payload.get("rate_limit_reset_credits"),
+        payload.get("resetCredits"),
+        payload.get("reset_credits"),
+    ]
+
+    for group in candidate_groups:
+        if not isinstance(group, dict):
+            continue
+
+        for key in ("availableCount", "available_count", "remainingCount", "remaining_count"):
+            count = non_negative_int(group.get(key))
+            if count is not None:
+                return count
+
+    for key in (
+        "resetCreditsAvailableCount",
+        "reset_credits_available_count",
+        "remainingResetCredits",
+        "remaining_reset_credits",
+    ):
+        count = non_negative_int(payload.get(key))
+        if count is not None:
+            return count
+
+    return None
 
 
 def limit_id_of(snapshot: object) -> str | None:
@@ -498,10 +550,11 @@ def snapshot_by_limit_id(snapshots: list[dict], limit_id: str) -> dict | None:
     return None
 
 
-def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
+def app_server_rate_limits() -> tuple[float, datetime, float, datetime, int | None]:
     payload = app_server_request("account/rateLimits/read")
     default_snapshot = payload.get("rateLimits", payload.get("rate_limits"))
     by_limit_id = payload.get("rateLimitsByLimitId", payload.get("rate_limits_by_limit_id")) or {}
+    reset_credits = reset_credits_available_count(payload)
 
     snapshots: list[dict] = []
     if isinstance(default_snapshot, dict):
@@ -535,7 +588,7 @@ def app_server_rate_limits() -> tuple[float, datetime, float, datetime]:
     if primary is None or secondary is None:
         raise QuotaReadError("Codex app-server quota response did not include both quota windows")
 
-    return primary[0], primary[1], secondary[0], secondary[1]
+    return primary[0], primary[1], secondary[0], secondary[1], reset_credits
 
 
 def reversed_session_lines(path: Path):
@@ -574,7 +627,7 @@ def reversed_session_lines(path: Path):
                 yield line
 
 
-def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None:
+def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | None] | None:
     if not sessions_dir.exists():
         raise QuotaReadError(f"Cannot find Codex sessions directory: {sessions_dir}")
 
@@ -591,7 +644,7 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
         raise QuotaReadError(f"No Codex session JSONL files found under: {sessions_dir}")
 
     best_seen_at: datetime | None = None
-    best_value: tuple[float, datetime, float, datetime] | None = None
+    best_value: tuple[float, datetime, float, datetime, int | None] | None = None
 
     for modified_at, path in files[:80]:
         if best_seen_at is not None:
@@ -625,7 +678,7 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
 
             if best_seen_at is None or seen_at > best_seen_at:
                 best_seen_at = seen_at
-                best_value = (primary[0], primary[1], secondary[0], secondary[1])
+                best_value = (primary[0], primary[1], secondary[0], secondary[1], None)
 
             break
 
@@ -636,7 +689,7 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime] | None
     return best_value
 
 
-def current_codex_rate_limits() -> tuple[float, datetime, float, datetime]:
+def current_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | None]:
     source = os.environ.get("CODEX_QUOTA_SOURCE", "auto").strip().lower()
 
     if source in {"session", "sessions", "logs", "jsonl"}:
@@ -671,6 +724,7 @@ def write_success_cache(
     five_hour_reset: datetime | None,
     weekly: float,
     weekly_reset: datetime | None,
+    reset_credits: int | None,
 ) -> None:
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     write_json_file(
@@ -680,6 +734,7 @@ def write_success_cache(
             "fiveHourResetAt": date_to_text(five_hour_reset),
             "weeklyRemainingPercent": float(weekly),
             "weeklyResetAt": date_to_text(weekly_reset),
+            "resetCreditsAvailableCount": reset_credits,
             "refreshedAt": now,
             "consecutiveFailures": 0,
         },
@@ -694,7 +749,7 @@ def read_cache_payload() -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, datetime | None, float, datetime | None]:
+def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, datetime | None, float, datetime | None, int | None]:
     payload = read_cache_payload()
     if payload is None:
         raise error
@@ -718,22 +773,23 @@ def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, dateti
     weekly = payload.get("weeklyRemainingPercent", payload.get("weekly_remaining_percent"))
     five_hour_reset = parse_date(payload.get("fiveHourResetAt", payload.get("five_hour_reset_at")))
     weekly_reset = parse_date(payload.get("weeklyResetAt", payload.get("weekly_reset_at")))
+    reset_credits = reset_credits_available_count(payload)
 
     if five_hour is None or weekly is None:
         raise error
 
     log_line("stale", f"Using cached quota after failed refresh {failures}/{STALE_ERROR_THRESHOLD}: {error}")
-    return float(five_hour), five_hour_reset, float(weekly), weekly_reset
+    return float(five_hour), five_hour_reset, float(weekly), weekly_reset, reset_credits
 
 
-def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None]:
+def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None, int | None]:
     if not quota_file.exists():
-        return None, None, None, None
+        return None, None, None, None, None
 
     try:
         payload = json.loads(quota_file.read_text(encoding="utf-8"))
     except Exception:
-        return None, None, None, None
+        return None, None, None, None, None
 
     legacy_percent = payload.get("remainingPercent", payload.get("remaining_percent"))
     five_hour = payload.get("fiveHourRemainingPercent", payload.get("five_hour_remaining_percent", legacy_percent))
@@ -747,6 +803,7 @@ def local_quota_fallback() -> tuple[float | None, datetime | None, float | None,
         parse_date(five_hour_time),
         None if weekly is None else float(weekly),
         parse_date(weekly_time),
+        reset_credits_available_count(payload),
     )
 
 
@@ -766,15 +823,15 @@ try:
         sys.exit(0)
 
     try:
-        five_hour, five_hour_reset, weekly, weekly_reset = current_codex_rate_limits()
-        write_success_cache(five_hour, five_hour_reset, weekly, weekly_reset)
+        five_hour, five_hour_reset, weekly, weekly_reset, reset_credits = current_codex_rate_limits()
+        write_success_cache(five_hour, five_hour_reset, weekly, weekly_reset, reset_credits)
     except QuotaReadError as error:
         try:
-            five_hour, five_hour_reset, weekly, weekly_reset = cached_rate_limits_after_error(error)
+            five_hour, five_hour_reset, weekly, weekly_reset, reset_credits = cached_rate_limits_after_error(error)
         except QuotaReadError:
             if not env_flag("CODEX_QUOTA_USE_FALLBACK"):
                 raise
-            five_hour, five_hour_reset, weekly, weekly_reset = local_quota_fallback()
+            five_hour, five_hour_reset, weekly, weekly_reset, reset_credits = local_quota_fallback()
             if five_hour is None or weekly is None:
                 raise QuotaReadError(f"Fallback quota file is missing or invalid: {quota_file}")
 
@@ -782,6 +839,7 @@ try:
 
     primary_text = f"5h {colored_percent(five_hour)} {format_time(five_hour_reset)}"
     weekly_text = f"{weekly_quota_label} {colored_percent(weekly)} {format_time(weekly_reset)}"
+    reset_text = reset_credits_text(reset_credits)
     bar_slots = compact_bar_slots()
     primary_bar_text = f"5h {progress_bar(five_hour)} {colored_percent(five_hour)} {format_time(five_hour_reset)}"
     weekly_bar_text = f"{weekly_quota_label} {progress_bar(weekly)} {colored_percent(weekly)} {format_time(weekly_reset)}"
@@ -789,6 +847,7 @@ try:
         f"{colored_label('5h', five_hour)} {progress_bar(five_hour, bar_slots)} {colored_percent(five_hour)} {format_time_compact(five_hour_reset)} "
         f"{ANSI_GRAY}|{ANSI_RESET} "
         f"{colored_label(weekly_quota_label, weekly)} {progress_bar(weekly, bar_slots)} {colored_percent(weekly)} {format_time_compact(weekly_reset)}"
+        f"{reset_text}"
     )
 
     if display_mode in {"primary", "5h", "five-hour"}:
@@ -802,9 +861,10 @@ try:
     elif display_mode in {"compact-bar", "horizontal-bar"}:
         emit(compact_bar_text)
     elif display_mode == "compact":
-        emit(f"{primary_text} | {weekly_text}")
+        emit(f"{primary_text} | {weekly_text}{reset_text}")
     else:
-        emit(f"{primary_text}\n{weekly_text}")
+        reset_line = f"\n{reset_text.strip()}" if reset_text else ""
+        emit(f"{primary_text}\n{weekly_text}{reset_line}")
 except Exception as error:
     emit_error(str(error))
 PY

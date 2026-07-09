@@ -13,7 +13,7 @@ Show your Codex quota on the Mac Touch Bar.
 The default MTMR widget is a compact single-line display:
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
+5h ▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
 Colors are applied in MTMR:
@@ -68,6 +68,7 @@ The helper displays:
 - 5-hour quota: the account primary quota from Codex's main `rateLimits` response.
 - Weekly quota: the account secondary quota from Codex's main `rateLimits` response.
 - Reset timestamps from each selected quota window.
+- Reset credits: `rateLimitResetCredits.availableCount`, shown as `🎟️×1`. This is not the same as the `↻` manual refresh button.
 
 If Codex app-server is temporarily unavailable, the helper shows the last successful quota for short glitches.
 After repeated failed refreshes, it shows an error instead of keeping stale data forever.
@@ -122,7 +123,7 @@ Useful settings:
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD`: default `3`, consecutive failed refreshes before showing an error instead of cached quota.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
-- `CODEX_QUOTA_BAR_SLOTS`: default `8`, controls bar length.
+- `CODEX_QUOTA_BAR_SLOTS`: default `6`, controls bar length.
 
 Example with a longer bar:
 
@@ -194,7 +195,7 @@ CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
 CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
-CODEX_QUOTA_BAR_SLOTS=8
+CODEX_QUOTA_BAR_SLOTS=6
 CODEX_QUOTA_DEBUG=1
 ```
 

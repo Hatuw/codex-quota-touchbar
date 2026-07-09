@@ -7,6 +7,7 @@ final class TouchBarQuotaView: NSView {
     private let weeklyBar = QuotaBarView()
     private let fiveHourRefreshedAtLabel = NSTextField(labelWithString: "--:--")
     private let weeklyRefreshedAtLabel = NSTextField(labelWithString: "--:--")
+    private let resetCreditsLabel = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -25,6 +26,8 @@ final class TouchBarQuotaView: NSView {
         weeklyBar.percent = snapshot.weeklyClampedPercent
         fiveHourRefreshedAtLabel.stringValue = DateFormatters.touchBarDateTime.string(from: snapshot.fiveHourResetAt)
         weeklyRefreshedAtLabel.stringValue = DateFormatters.touchBarDateTime.string(from: snapshot.weeklyResetAt)
+        resetCreditsLabel.stringValue = snapshot.resetCreditsDisplay ?? ""
+        resetCreditsLabel.isHidden = snapshot.resetCreditsDisplay == nil
     }
 
     private func setup() {
@@ -46,12 +49,18 @@ final class TouchBarQuotaView: NSView {
             $0.lineBreakMode = .byClipping
         }
 
+        resetCreditsLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        resetCreditsLabel.textColor = .secondaryLabelColor
+        resetCreditsLabel.alignment = .right
+        resetCreditsLabel.lineBreakMode = .byClipping
+        resetCreditsLabel.isHidden = true
+
         let fiveHourTextStack = NSStackView(views: [fiveHourLabel, fiveHourRefreshedAtLabel])
         fiveHourTextStack.orientation = .horizontal
         fiveHourTextStack.spacing = 6
         fiveHourTextStack.alignment = .centerY
 
-        let weeklyTextStack = NSStackView(views: [weeklyLabel, weeklyRefreshedAtLabel])
+        let weeklyTextStack = NSStackView(views: [weeklyLabel, weeklyRefreshedAtLabel, resetCreditsLabel])
         weeklyTextStack.orientation = .horizontal
         weeklyTextStack.spacing = 6
         weeklyTextStack.alignment = .centerY
@@ -80,10 +89,10 @@ final class TouchBarQuotaView: NSView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            fiveHourBar.widthAnchor.constraint(equalToConstant: 132),
-            weeklyBar.widthAnchor.constraint(equalToConstant: 132),
-            fiveHourTextStack.widthAnchor.constraint(equalToConstant: 94),
-            weeklyTextStack.widthAnchor.constraint(equalToConstant: 94),
+            fiveHourBar.widthAnchor.constraint(equalToConstant: 102),
+            weeklyBar.widthAnchor.constraint(equalToConstant: 102),
+            fiveHourTextStack.widthAnchor.constraint(equalToConstant: 124),
+            weeklyTextStack.widthAnchor.constraint(equalToConstant: 124),
             fiveHourBar.heightAnchor.constraint(equalToConstant: 5),
             weeklyBar.heightAnchor.constraint(equalToConstant: 5)
         ])

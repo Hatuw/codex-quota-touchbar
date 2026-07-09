@@ -7,6 +7,7 @@ struct QuotaSnapshot: Equatable {
     let resetAt: Date?
     let fiveHourResetAt: Date
     let weeklyResetAt: Date
+    let resetCreditsAvailableCount: Int?
     let sourceName: String
     let note: String?
     let isFallback: Bool
@@ -20,7 +21,7 @@ struct QuotaSnapshot: Equatable {
     }
 
     var displayTitle: String {
-        "\(QuotaDisplayLabels.fiveHourTitle) \(Int(fiveHourClampedPercent.rounded()))%  \(QuotaDisplayLabels.weeklyShort) \(Int(weeklyClampedPercent.rounded()))%"
+        "\(QuotaDisplayLabels.fiveHourTitle) \(Int(fiveHourClampedPercent.rounded()))%  \(QuotaDisplayLabels.weeklyShort) \(Int(weeklyClampedPercent.rounded()))%\(resetCreditsSuffix)"
     }
 
     var displaySubtitle: String {
@@ -28,7 +29,17 @@ struct QuotaSnapshot: Equatable {
     }
 
     var touchBarText: String {
-        "5h \(Int(fiveHourClampedPercent.rounded()))% \(DateFormatters.touchBarDateTime.string(from: fiveHourResetAt))\n\(QuotaDisplayLabels.weeklyShort) \(Int(weeklyClampedPercent.rounded()))% \(DateFormatters.touchBarDateTime.string(from: weeklyResetAt))"
+        "5h \(Int(fiveHourClampedPercent.rounded()))% \(DateFormatters.touchBarDateTime.string(from: fiveHourResetAt))\n\(QuotaDisplayLabels.weeklyShort) \(Int(weeklyClampedPercent.rounded()))% \(DateFormatters.touchBarDateTime.string(from: weeklyResetAt))\(resetCreditsSuffix)"
+    }
+
+    var resetCreditsDisplay: String? {
+        guard let resetCreditsAvailableCount else { return nil }
+        return "🎟️×\(max(0, resetCreditsAvailableCount))"
+    }
+
+    private var resetCreditsSuffix: String {
+        guard let resetCreditsDisplay else { return "" }
+        return " \(resetCreditsDisplay)"
     }
 
     static let loading = QuotaSnapshot(
@@ -38,6 +49,7 @@ struct QuotaSnapshot: Equatable {
         resetAt: nil,
         fiveHourResetAt: Date(),
         weeklyResetAt: Date(),
+        resetCreditsAvailableCount: nil,
         sourceName: "Loading",
         note: "Loading quota data",
         isFallback: true
@@ -144,6 +156,10 @@ struct QuotaFilePayload: Codable {
     var refreshed_at: String? = nil
     var updatedAt: String? = nil
     var updated_at: String? = nil
+    var resetCreditsAvailableCount: Int? = nil
+    var reset_credits_available_count: Int? = nil
+    var remainingResetCredits: Int? = nil
+    var remaining_reset_credits: Int? = nil
     var sourceName: String? = nil
     var source_name: String? = nil
     var note: String? = nil
@@ -157,6 +173,7 @@ struct QuotaFilePayload: Codable {
         let refreshed = refreshedAt ?? refreshed_at ?? updatedAt ?? updated_at
         let fiveHourReset = fiveHourResetAt ?? five_hour_reset_at ?? fiveHourRefreshedAt ?? five_hour_refreshed_at ?? refreshed
         let weeklyReset = weeklyResetAt ?? weekly_reset_at ?? weeklyRefreshedAt ?? weekly_refreshed_at ?? refreshed
+        let resetCredits = resetCreditsAvailableCount ?? reset_credits_available_count ?? remainingResetCredits ?? remaining_reset_credits
 
         return QuotaSnapshot(
             fiveHourRemainingPercent: fiveHourPercent,
@@ -165,6 +182,7 @@ struct QuotaFilePayload: Codable {
             resetAt: DateFormatters.parseISO8601(reset),
             fiveHourResetAt: DateFormatters.parseISO8601(fiveHourReset) ?? now,
             weeklyResetAt: DateFormatters.parseISO8601(weeklyReset) ?? now,
+            resetCreditsAvailableCount: resetCredits.map { max(0, $0) },
             sourceName: sourceName ?? source_name ?? "quota.json",
             note: note,
             isFallback: false

@@ -37,6 +37,7 @@ final class QuotaService {
                 resetAt: nil,
                 fiveHourResetAt: Date(),
                 weeklyResetAt: Date(),
+                resetCreditsAvailableCount: nil,
                 sourceName: provider.sourceDescription,
                 note: error.localizedDescription,
                 isFallback: true
@@ -151,6 +152,7 @@ final class CodexRateLimitProvider: QuotaProviding {
             resetAt: nil,
             fiveHourResetAt: result.primary.resetsAt,
             weeklyResetAt: result.secondary.resetsAt,
+            resetCreditsAvailableCount: nil,
             sourceName: "Codex rate_limits",
             note: "Updated \(DateFormatters.shortDateTime.string(from: result.observedAt))",
             isFallback: false
@@ -359,6 +361,10 @@ final class LocalQuotaFileProvider: QuotaProviding {
             refreshed_at: nil,
             updatedAt: DateFormatters.iso8601.string(from: Date()),
             updated_at: nil,
+            resetCreditsAvailableCount: 1,
+            reset_credits_available_count: nil,
+            remainingResetCredits: nil,
+            remaining_reset_credits: nil,
             sourceName: "Local quota.json",
             source_name: nil,
             note: "Demo data. Replace quota percentages and refresh timestamps with real Codex values."
@@ -400,6 +406,10 @@ final class LocalQuotaFileProvider: QuotaProviding {
             refreshed_at: nil,
             updatedAt: nil,
             updated_at: nil,
+            resetCreditsAvailableCount: snapshot.resetCreditsAvailableCount,
+            reset_credits_available_count: nil,
+            remainingResetCredits: nil,
+            remaining_reset_credits: nil,
             sourceName: payload.sourceName ?? payload.source_name ?? snapshot.sourceName,
             source_name: nil,
             note: payload.note ?? "Quota file upgraded for five-hour and weekly quota display."

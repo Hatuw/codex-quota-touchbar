@@ -11,6 +11,7 @@ final class QuotaSnapshotTests: XCTestCase {
             fiveHourResetAt: "2026-06-10T10:00:00+08:00",
             weeklyResetAt: "2026-06-10T11:00:00+08:00",
             refreshedAt: "2026-06-10T10:00:00+08:00",
+            resetCreditsAvailableCount: 2,
             sourceName: "Unit Test",
             note: nil
         )
@@ -22,6 +23,8 @@ final class QuotaSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.planName, "Codex Plus")
         XCTAssertEqual(snapshot.sourceName, "Unit Test")
         XCTAssertNotNil(snapshot.resetAt)
+        XCTAssertEqual(snapshot.resetCreditsAvailableCount, 2)
+        XCTAssertTrue(snapshot.displayTitle.contains("🎟️×2"))
         XCTAssertEqual(DateFormatters.shortTime.string(from: snapshot.fiveHourResetAt), "10:00")
         XCTAssertEqual(DateFormatters.shortTime.string(from: snapshot.weeklyResetAt), "11:00")
     }
@@ -34,6 +37,7 @@ final class QuotaSnapshotTests: XCTestCase {
             resetAt: nil,
             fiveHourResetAt: Date(),
             weeklyResetAt: Date(),
+            resetCreditsAvailableCount: nil,
             sourceName: "Unit Test",
             note: nil,
             isFallback: false
@@ -209,6 +213,7 @@ private struct StaticQuotaProvider: QuotaProviding {
             resetAt: nil,
             fiveHourResetAt: Date(),
             weeklyResetAt: Date(),
+            resetCreditsAvailableCount: nil,
             sourceName: sourceDescription,
             note: nil,
             isFallback: true

@@ -13,7 +13,7 @@
 默认 MTMR 组件是一行紧凑显示：
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
+5h ▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
 在 MTMR 中会自动上色：
@@ -68,6 +68,7 @@
 - 5 小时额度：Codex 主 `rateLimits` 返回里的账号 primary 额度。
 - 周额度：Codex 主 `rateLimits` 返回里的账号 secondary 额度。
 - 刷新/重置时间：分别来自对应额度窗口的 `resets_at`。
+- 额度重置次数：来自 `rateLimitResetCredits.availableCount`，显示为 `🎟️×1`；它不是右侧 `↻` 手动刷新按钮的次数。
 
 如果 Codex app-server 短暂不可用，helper 会先显示上一次成功读取的额度，避免偶发错误打断 Touch Bar。
 如果连续多次刷新都失败，才会显示错误，避免一直保留过旧数据。
@@ -122,7 +123,7 @@ mtmr/items.template.json
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD`：默认 `3`，表示连续失败多少次后才显示错误，不再显示缓存额度。
 - `CODEX_QUOTA_LOCALE`：可选，用来指定 label 判断用的 locale。默认读取系统 locale。
 - `CODEX_QUOTA_WEEK_LABEL`：可选，用来强制指定周额度 label。默认中文 locale 显示 `周`，其他 locale 显示 `W`。
-- `CODEX_QUOTA_BAR_SLOTS`：默认 `8`，控制血条长度。
+- `CODEX_QUOTA_BAR_SLOTS`：默认 `6`，控制血条长度。
 
 例如把血条加长：
 
@@ -194,7 +195,7 @@ CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
 CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=zh_CN
 CODEX_QUOTA_WEEK_LABEL=周
-CODEX_QUOTA_BAR_SLOTS=8
+CODEX_QUOTA_BAR_SLOTS=6
 CODEX_QUOTA_DEBUG=1
 ```
 
