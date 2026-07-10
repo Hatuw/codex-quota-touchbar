@@ -34,13 +34,15 @@ Environment:
                            Fall back to session logs if app-server fails. Default: off.
   CODEX_QUOTA_USE_FALLBACK=1
                            Read CODEX_QUOTA_FILE when no real Codex data is available.
-  CODEX_CLI_PATH           Codex CLI path. Default: PATH lookup, then /Applications/Codex.app/Contents/Resources/codex
+  CODEX_CLI_PATH           Codex CLI path. Default: PATH lookup, then the bundled CLI in ChatGPT.app or Codex.app.
   CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS
                            App-server read timeout. Default: 30
   CODEX_QUOTA_APP_SERVER_ATTEMPTS
                            App-server read attempts. Default: 2
   CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS
                            Delay before retrying app-server reads. Default: 3
+  CODEX_QUOTA_APP_SERVER_ORIGINATOR
+                           App-server quota context. Default: Codex Desktop
   CODEX_QUOTA_STALE_ERROR_THRESHOLD
                            Consecutive failed refreshes before showing an error. Default: 3
   CODEX_QUOTA_LOCALE       Locale hint for labels. Default: system locale.
@@ -427,11 +429,20 @@ def codex_executable() -> str:
     if found:
         return found
 
-    bundled = "/Applications/Codex.app/Contents/Resources/codex"
-    if os.access(bundled, os.X_OK):
-        return bundled
+    bundled_candidates = [
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+        str(Path.home() / "Applications/ChatGPT.app/Contents/Resources/codex"),
+        str(Path.home() / "Applications/Codex.app/Contents/Resources/codex"),
+    ]
+    for bundled in bundled_candidates:
+        if os.access(bundled, os.X_OK):
+            return bundled
 
-    raise QuotaReadError("Cannot find Codex CLI. Set CODEX_CLI_PATH if Codex is installed elsewhere.")
+    raise QuotaReadError(
+        "Cannot find Codex CLI in PATH, ChatGPT.app, or Codex.app. "
+        "Set CODEX_CLI_PATH if it is installed elsewhere."
+    )
 
 
 def app_server_request(method: str, params: object = None) -> dict:
@@ -456,9 +467,19 @@ def app_server_request(method: str, params: object = None) -> dict:
 
 def app_server_request_once(method: str, params: object = None) -> dict:
     executable = codex_executable()
+    process_environment = os.environ.copy()
+    configured_originator = os.environ.get("CODEX_QUOTA_APP_SERVER_ORIGINATOR")
+    if configured_originator is None:
+        process_environment.setdefault("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", "Codex Desktop")
+    elif configured_originator.strip():
+        process_environment["CODEX_INTERNAL_ORIGINATOR_OVERRIDE"] = configured_originator.strip()
+    else:
+        process_environment.pop("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", None)
+
     try:
         process = subprocess.Popen(
             [executable, "app-server", "--stdio"],
+            env=process_environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

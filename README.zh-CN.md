@@ -27,7 +27,7 @@
 
 - 带 Touch Bar 的 macOS。
 - [MTMR](https://github.com/toxblh/MTMR)，用于常驻 Touch Bar 显示。
-- 本地已安装 Codex Desktop 或 Codex CLI。
+- 本地已安装带 Codex 功能的 ChatGPT Desktop、新版合并前的 Codex Desktop，或 Codex CLI。
 - Python 3，现代 macOS 通常自带 `/usr/bin/python3`。
 
 本仓库也包含一个可选的原生 macOS App。它可以显示真正的 AppKit 进度条，但 Apple 只允许普通 App 在“当前 App 激活”时控制 Touch Bar。如果你希望全局常驻显示，请使用 MTMR 方案。
@@ -62,6 +62,8 @@
 
 默认情况下，helper 会向本地 Codex app-server 读取 `account/rateLimits/read`。
 这个数据源比 session 日志更新，也更接近 Codex Desktop 内部使用的额度数据。
+helper 会自动查找新版 `/Applications/ChatGPT.app` 和旧版 `/Applications/Codex.app` 内置的 Codex CLI，因此两种桌面应用都可以使用。
+新版合并应用还会根据启动来源选择额度上下文。helper 默认以 `Codex Desktop` 上下文启动 app-server，确保 MTMR 与 ChatGPT/Codex Desktop 显示同一组额度，而不是误读另一组 CLI 额度池。
 
 组件默认显示：
 
@@ -116,10 +118,11 @@ mtmr/items.template.json
 - `CODEX_QUOTA_LIMIT_ID`：旧版兼容配置，会同时覆盖 5 小时额度和周额度。只有你想让两个额度都来自同一个 limit id 时才建议使用。
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK`：默认关闭。设置为 `1` 后，app-server 暂时不可用时才会用 session 日志兜底。
 - `CODEX_QUOTA_USE_FALLBACK`：默认关闭。设置为 `1` 时，如果没有真实 Codex 数据，会读取 `CODEX_QUOTA_FILE`。
-- `CODEX_CLI_PATH`：可选，用来指定 Codex CLI 路径。
+- `CODEX_CLI_PATH`：可选，用来指定 Codex CLI 路径。默认依次查找 `PATH`、新版 `ChatGPT.app` 和旧版 `Codex.app`。
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`：默认 `30`，表示读取 app-server 的等待秒数。
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS`：默认 `2`，表示显示错误前最多读取 app-server 的次数。
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`：默认 `3`，表示两次 app-server 读取之间等待的秒数。
+- `CODEX_QUOTA_APP_SERVER_ORIGINATOR`：默认 `Codex Desktop`，用于让 app-server 读取与桌面应用一致的额度上下文。仅在新版应用再次调整内部标识时才需要覆盖。
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD`：默认 `3`，表示连续失败多少次后才显示错误，不再显示缓存额度。
 - `CODEX_QUOTA_LOCALE`：可选，用来指定 label 判断用的 locale。默认读取系统 locale。
 - `CODEX_QUOTA_WEEK_LABEL`：可选，用来强制指定周额度 label。默认中文 locale 显示 `周`，其他 locale 显示 `W`。
@@ -188,10 +191,11 @@ CODEX_QUOTA_PRIMARY_LIMIT_ID=auto
 CODEX_QUOTA_WEEKLY_LIMIT_ID=codex
 CODEX_QUOTA_ALLOW_SESSION_FALLBACK=0
 CODEX_QUOTA_USE_FALLBACK=0
-CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
+CODEX_CLI_PATH=/Applications/ChatGPT.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
 CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
 CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
+CODEX_QUOTA_APP_SERVER_ORIGINATOR="Codex Desktop"
 CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=zh_CN
 CODEX_QUOTA_WEEK_LABEL=周
@@ -263,6 +267,8 @@ python3 -m json.tool mtmr/items.template.json >/dev/null
   读取失败和重试详情即使没有开启 `CODEX_QUOTA_DEBUG`，也会写入同一个日志路径。
 
 如果组件显示错误，通常表示 Codex app-server 已经连续多次失败，或没有返回可用的额度数据。开始或继续一个 Codex session 后，点 `↻` 按钮，或重新运行 helper 检查。
+
+如果 ChatGPT/Codex Desktop 安装在自定义位置，可以通过 `CODEX_CLI_PATH` 指向应用内的 `Contents/Resources/codex`。合并更新前的默认路径仍受支持：`/Applications/Codex.app/Contents/Resources/codex`。
 
 ## 限制
 

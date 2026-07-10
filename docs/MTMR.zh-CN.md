@@ -33,7 +33,7 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 ## 当前组件格式
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
+5h ▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
 第一个额度是 5 小时窗口，第二个额度是周窗口。
@@ -46,6 +46,8 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 
 helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 这个数据通常比 session 日志更新，也更接近 Codex Desktop 自己显示的额度。
+helper 会自动识别新版 `ChatGPT.app` 和合并更新前的 `Codex.app` 内置 CLI；MTMR 的精简环境变量不会影响这个查找过程。
+新版合并应用会根据启动来源选择额度上下文。helper 会补充桌面应用使用的 `Codex Desktop` 上下文，避免 MTMR 读到另一组 CLI 额度。
 
 5 小时额度默认使用 Codex 主 `rateLimits` 返回里的账号 primary 额度。
 周额度默认使用 Codex 主 `rateLimits` 返回里的账号 secondary 额度。
@@ -63,9 +65,11 @@ helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID=...`：指定周额度池。
 - `CODEX_QUOTA_LIMIT_ID=...`：旧版兼容配置，会同时覆盖两个额度窗口。
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1`：app-server 失败时才允许使用 session 日志兜底。
+- `CODEX_CLI_PATH=...`：桌面应用安装在自定义位置时，手动指定其 `Contents/Resources/codex`。
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30`：调整读取 app-server 的等待秒数。
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2`：重试瞬时 app-server 失败。
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3`：调整重试间隔。
+- `CODEX_QUOTA_APP_SERVER_ORIGINATOR=...`：仅在未来桌面应用更改内部额度上下文标识时覆盖。
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD=3`：调整连续失败多少次后才停止使用缓存额度。
 
 只有明确想用 fallback JSON 测试时，才建议设置 `CODEX_QUOTA_USE_FALLBACK=1`。

@@ -27,7 +27,7 @@ Colors are applied in MTMR:
 
 - macOS with a Touch Bar.
 - [MTMR](https://github.com/toxblh/MTMR) for always-on Touch Bar display.
-- Codex Desktop or Codex CLI installed locally.
+- ChatGPT Desktop with Codex, the legacy standalone Codex Desktop app, or Codex CLI installed locally.
 - Python 3, available at `/usr/bin/python3` on modern macOS.
 
 The native macOS app in this repository is optional. It can show a real AppKit progress bar, but Apple only allows normal apps to control the Touch Bar while that app is active. For always-on display, use MTMR.
@@ -62,6 +62,8 @@ The installer backs up your existing MTMR config before writing a new one.
 
 By default, the helper asks the local Codex app-server for `account/rateLimits/read`.
 This is fresher than session logs and matches the quota data Codex Desktop uses internally.
+The helper automatically checks the Codex CLI bundled with the current `/Applications/ChatGPT.app` and the legacy `/Applications/Codex.app`, so both desktop app layouts are supported.
+The unified desktop app also selects a quota context from its launch origin. The helper starts app-server with the `Codex Desktop` context by default so MTMR reads the same quota pool as ChatGPT/Codex Desktop instead of a separate CLI context.
 
 The helper displays:
 
@@ -116,10 +118,11 @@ Useful settings:
 - `CODEX_QUOTA_LIMIT_ID`: legacy override for both quota windows. Use this only when you want one limit id for both 5-hour and weekly quota.
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK`: default off. Set to `1` if you prefer session-log data when app-server is temporarily unavailable.
 - `CODEX_QUOTA_USE_FALLBACK`: default off. Set to `1` to read `CODEX_QUOTA_FILE` when no real Codex data is available.
-- `CODEX_CLI_PATH`: optional Codex CLI path override.
+- `CODEX_CLI_PATH`: optional Codex CLI path override. By default, the helper checks `PATH`, the current `ChatGPT.app`, and the legacy `Codex.app`.
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS`: default `30`, app-server read timeout.
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS`: default `2`, app-server read attempts before showing an error.
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS`: default `3`, delay between app-server attempts.
+- `CODEX_QUOTA_APP_SERVER_ORIGINATOR`: default `Codex Desktop`, keeping app-server in the same quota context as the desktop app. Override it only if a future app release changes this internal identifier.
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD`: default `3`, consecutive failed refreshes before showing an error instead of cached quota.
 - `CODEX_QUOTA_LOCALE`: optional locale hint for labels. By default, the helper reads the system locale.
 - `CODEX_QUOTA_WEEK_LABEL`: optional weekly label override. By default, Chinese locales use the localized weekly label; other locales show `W`.
@@ -188,10 +191,11 @@ CODEX_QUOTA_PRIMARY_LIMIT_ID=auto
 CODEX_QUOTA_WEEKLY_LIMIT_ID=codex
 CODEX_QUOTA_ALLOW_SESSION_FALLBACK=0
 CODEX_QUOTA_USE_FALLBACK=0
-CODEX_CLI_PATH=/Applications/Codex.app/Contents/Resources/codex
+CODEX_CLI_PATH=/Applications/ChatGPT.app/Contents/Resources/codex
 CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30
 CODEX_QUOTA_APP_SERVER_ATTEMPTS=2
 CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3
+CODEX_QUOTA_APP_SERVER_ORIGINATOR="Codex Desktop"
 CODEX_QUOTA_STALE_ERROR_THRESHOLD=3
 CODEX_QUOTA_LOCALE=en_US
 CODEX_QUOTA_WEEK_LABEL=W
@@ -263,6 +267,8 @@ If the widget does not update:
   Error and retry details are written to the same log path even when `CODEX_QUOTA_DEBUG` is not enabled.
 
 If the widget shows an error, Codex app-server likely failed for several consecutive refreshes or did not return usable quota data. Start or continue a Codex session, tap the `↻` button, or run the helper again.
+
+If ChatGPT/Codex Desktop is installed in a custom location, set `CODEX_CLI_PATH` to its `Contents/Resources/codex` executable. The pre-merge default path remains supported: `/Applications/Codex.app/Contents/Resources/codex`.
 
 ## Limitations
 

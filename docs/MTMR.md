@@ -33,19 +33,21 @@ The installer:
 ## Current Widget Format
 
 ```text
-5h ▬▬▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬▬▬ 26% 6/11 09:02  ↻
+5h ▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
 The first quota is the 5-hour window. The second quota is the weekly window.
 Chinese locales use the localized weekly label. Other locales show it as `W`.
 Set `CODEX_QUOTA_WEEK_LABEL` in the inline command to override that label.
 
-The `↻` button restarts MTMR in the background so the quota widget redraws immediately instead of waiting for the next 10-minute interval.
+The `↻` button restarts MTMR in the background so the quota widget redraws immediately instead of waiting for the next 1-minute interval.
 
 ## Data Source
 
 The helper reads `account/rateLimits/read` from the local Codex app-server by default.
 This usually matches the quota data shown by Codex Desktop more closely than session logs.
+The helper automatically finds the CLI bundled with the current `ChatGPT.app` or the pre-merge `Codex.app`, including when MTMR runs with a minimal `PATH`.
+The unified app selects a quota context from its launch origin. The helper supplies the desktop app's `Codex Desktop` context so MTMR does not accidentally read a separate CLI quota pool.
 
 The 5-hour quota uses the account primary quota from Codex's main `rateLimits` response.
 The weekly quota uses the account secondary quota from Codex's main `rateLimits` response.
@@ -63,9 +65,11 @@ To tune the source or limit ids, set these variables in the inline command:
 - `CODEX_QUOTA_WEEKLY_LIMIT_ID=...` for the weekly quota.
 - `CODEX_QUOTA_LIMIT_ID=...` as a legacy override for both quota windows.
 - `CODEX_QUOTA_ALLOW_SESSION_FALLBACK=1` to allow session logs if app-server fails.
+- `CODEX_CLI_PATH=...` to point at `Contents/Resources/codex` when the desktop app is installed in a custom location.
 - `CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS=30` to tune the app-server read timeout.
 - `CODEX_QUOTA_APP_SERVER_ATTEMPTS=2` to retry transient app-server failures.
 - `CODEX_QUOTA_APP_SERVER_RETRY_DELAY_SECONDS=3` to tune the retry delay.
+- `CODEX_QUOTA_APP_SERVER_ORIGINATOR=...` only if a future desktop release changes its internal quota-context identifier.
 - `CODEX_QUOTA_STALE_ERROR_THRESHOLD=3` to tune how many consecutive failed refreshes may use cached quota.
 
 Set `CODEX_QUOTA_USE_FALLBACK=1` only when you intentionally want to test with the fallback JSON file.
