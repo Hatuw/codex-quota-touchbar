@@ -36,6 +36,12 @@ MTMR 是推荐方案，因为它可以在你使用其他 macOS App 时，让额�
 5h ▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
+只返回单一周额度窗口的账号会显示：
+
+```text
+周 ▬▬▬▬▬▬ 98% 7/20 05:21 🎟️×1  ↻
+```
+
 第一个额度是 5 小时窗口，第二个额度是周窗口。
 中文 locale 会显示 `周`，其他 locale 会显示 `W`。
 如果想强制指定 label，可以在 inline command 中设置 `CODEX_QUOTA_WEEK_LABEL`。
@@ -49,8 +55,8 @@ helper 默认会从本地 Codex app-server 读取 `account/rateLimits/read`。
 helper 会自动识别新版 `ChatGPT.app` 和合并更新前的 `Codex.app` 内置 CLI；MTMR 的精简环境变量不会影响这个查找过程。
 新版合并应用会根据启动来源选择额度上下文。helper 会补充桌面应用使用的 `Codex Desktop` 上下文，避免 MTMR 读到另一组 CLI 额度。
 
-5 小时额度默认使用 Codex 主 `rateLimits` 返回里的账号 primary 额度。
-周额度默认使用 Codex 主 `rateLimits` 返回里的账号 secondary 额度。
+helper 会根据窗口时长识别额度：`300` 分钟对应 5 小时额度，`10080` 分钟对应周额度。
+旧版双窗口返回继续显示两项；新版只返回 7 天 `primary` 且 `secondary=null` 时，只显示周额度。
 
 如果 app-server 短暂不可用，helper 会先显示上一次成功读取的额度，避免偶发错误打断 Touch Bar。
 如果连续多次刷新都失败，才会显示错误，避免一直保留过旧数据。

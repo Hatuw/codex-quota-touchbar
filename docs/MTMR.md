@@ -36,6 +36,12 @@ The installer:
 5h ▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
+Accounts that only expose a single weekly window show:
+
+```text
+W ▬▬▬▬▬▬ 98% 7/20 05:21 🎟️×1  ↻
+```
+
 The first quota is the 5-hour window. The second quota is the weekly window.
 Chinese locales use the localized weekly label. Other locales show it as `W`.
 Set `CODEX_QUOTA_WEEK_LABEL` in the inline command to override that label.
@@ -49,8 +55,8 @@ This usually matches the quota data shown by Codex Desktop more closely than ses
 The helper automatically finds the CLI bundled with the current `ChatGPT.app` or the pre-merge `Codex.app`, including when MTMR runs with a minimal `PATH`.
 The unified app selects a quota context from its launch origin. The helper supplies the desktop app's `Codex Desktop` context so MTMR does not accidentally read a separate CLI quota pool.
 
-The 5-hour quota uses the account primary quota from Codex's main `rateLimits` response.
-The weekly quota uses the account secondary quota from Codex's main `rateLimits` response.
+The helper classifies windows by duration: `300` minutes is the 5-hour quota and `10080` minutes is the weekly quota.
+Legacy two-window responses continue to show both items. A new response with a 7-day `primary` and `secondary=null` shows the weekly quota alone.
 
 If app-server is temporarily unavailable, the helper shows the last successful quota for short glitches.
 After repeated failed refreshes, it shows an error instead of keeping stale data forever.

@@ -3,12 +3,61 @@ import XCTest
 
 final class HelperScriptTests: XCTestCase {
     func testHelperSuppliesDesktopOriginatorToAppServer() throws {
+        let output = try runHelper(
+            rateLimitsJSON: """
+            {"rateLimits":{"primary":{"usedPercent":25,"resetsAt":1781104076,"windowDurationMins":300},"secondary":{"usedPercent":60,"resetsAt":1781690876,"windowDurationMins":10080}},"rateLimitResetCredits":{"availableCount":1}}
+            """
+        )
+
+        XCTAssertTrue(output.contains("75%"), output)
+        XCTAssertTrue(output.contains("40%"), output)
+        XCTAssertFalse(output.contains("wrong originator"), output)
+    }
+
+    func testHelperDisplaysSingleWeeklyWindow() throws {
+        let output = try runHelper(
+            rateLimitsJSON: """
+            {"rateLimits":{"primary":{"usedPercent":2,"resetsAt":1784496077,"windowDurationMins":10080},"secondary":null},"rateLimitResetCredits":{"availableCount":1}}
+            """
+        )
+
+        XCTAssertTrue(output.contains("W"), output)
+        XCTAssertTrue(output.contains("98%"), output)
+        XCTAssertTrue(output.contains("🎟️×1"), output)
+        XCTAssertFalse(output.contains("5h"), output)
+        XCTAssertFalse(output.contains("quota error"), output)
+    }
+
+    func testHelperReusesSingleWeeklyCacheAfterTransientFailure() throws {
+        let output = try runHelper(
+            rateLimitsJSON: "{}",
+            initialCacheJSON: """
+            {"fiveHourRemainingPercent":null,"fiveHourResetAt":null,"weeklyRemainingPercent":55,"weeklyResetAt":"2026-07-20T05:21:17+08:00","resetCreditsAvailableCount":1,"consecutiveFailures":0}
+            """,
+            forceError: true
+        )
+
+        XCTAssertTrue(output.contains("W"), output)
+        XCTAssertTrue(output.contains("55%"), output)
+        XCTAssertTrue(output.contains("🎟️×1"), output)
+        XCTAssertFalse(output.contains("5h"), output)
+        XCTAssertFalse(output.contains("quota error"), output)
+    }
+
+    private func runHelper(
+        rateLimitsJSON: String,
+        initialCacheJSON: String? = nil,
+        forceError: Bool = false
+    ) throws -> String {
         let fileManager = FileManager.default
         let directory = fileManager.temporaryDirectory
             .appendingPathComponent("CodexQuotaTouchBarHelperTests-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: directory) }
 
+        let responseJSON = forceError
+            ? "{\"id\":2,\"error\":{\"code\":-32603,\"message\":\"temporary failure\"}}"
+            : "{\"id\":2,\"result\":\(rateLimitsJSON)}"
         let fakeCodex = directory.appendingPathComponent("codex")
         try """
         #!/bin/sh
@@ -19,7 +68,7 @@ final class HelperScriptTests: XCTestCase {
         while IFS= read -r line; do
           case "$line" in
             *'"id":2'*)
-              printf '%s\\n' '{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":25,"resetsAt":1781104076},"secondary":{"usedPercent":60,"resetsAt":1781690876}},"rateLimitResetCredits":{"availableCount":1}}}'
+              printf '%s\\n' '\(responseJSON)'
               ;;
           esac
         done
@@ -31,6 +80,10 @@ final class HelperScriptTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("scripts/codex_quota_touchbar.sh")
+        let cache = directory.appendingPathComponent("cache.json")
+        if let initialCacheJSON {
+            try initialCacheJSON.write(to: cache, atomically: true, encoding: .utf8)
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = [helper.path, "compact"]
@@ -40,7 +93,7 @@ final class HelperScriptTests: XCTestCase {
             "CODEX_CLI_PATH": fakeCodex.path,
             "CODEX_QUOTA_APP_SERVER_ATTEMPTS": "1",
             "CODEX_QUOTA_APP_SERVER_TIMEOUT_SECONDS": "5",
-            "CODEX_QUOTA_CACHE_FILE": directory.appendingPathComponent("cache.json").path,
+            "CODEX_QUOTA_CACHE_FILE": cache.path,
             "CODEX_QUOTA_LOCALE": "en_US",
             "CODEX_QUOTA_SOURCE": "app-server",
         ]
@@ -54,8 +107,6 @@ final class HelperScriptTests: XCTestCase {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         let text = String(decoding: data, as: UTF8.self)
         XCTAssertEqual(process.terminationStatus, 0, text)
-        XCTAssertTrue(text.contains("75%"), text)
-        XCTAssertTrue(text.contains("40%"), text)
-        XCTAssertFalse(text.contains("wrong originator"), text)
+        return text
     }
 }

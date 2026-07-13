@@ -16,6 +16,12 @@ The default MTMR widget is a compact single-line display:
 5h ▬▬▬▬▬▬ 99% 19:36 | W ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
+If the account only exposes the new single weekly window, the widget automatically shortens to:
+
+```text
+W ▬▬▬▬▬▬ 98% 7/20 05:21 🎟️×1  ↻
+```
+
 Colors are applied in MTMR:
 
 - Green: quota remaining is `60%` or higher.
@@ -67,10 +73,12 @@ The unified desktop app also selects a quota context from its launch origin. The
 
 The helper displays:
 
-- 5-hour quota: the account primary quota from Codex's main `rateLimits` response.
-- Weekly quota: the account secondary quota from Codex's main `rateLimits` response.
+- 5-hour quota: detected by `windowDurationMins=300`, independent of the fixed `primary` field position.
+- Weekly quota: detected by `windowDurationMins=10080`, independent of the fixed `secondary` field position.
 - Reset timestamps from each selected quota window.
 - Reset credits: `rateLimitResetCredits.availableCount`, shown as `🎟️×1`. This is not the same as the `↻` manual refresh button.
+
+Legacy accounts with two windows continue to show `5h + W`. If the current ChatGPT/Codex response only contains one 7-day window, the helper shows the weekly quota alone instead of mislabeling it as 5-hour quota or treating `secondary=null` as an error.
 
 If Codex app-server is temporarily unavailable, the helper shows the last successful quota for short glitches.
 After repeated failed refreshes, it shows an error instead of keeping stale data forever.

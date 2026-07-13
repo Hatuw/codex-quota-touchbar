@@ -353,6 +353,60 @@ def rate_window(raw: object) -> tuple[float, datetime] | None:
         return None
 
 
+def rate_window_duration_minutes(raw: object) -> int | None:
+    if not isinstance(raw, dict):
+        return None
+
+    for key in ("window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins"):
+        duration = non_negative_int(raw.get(key))
+        if duration is not None:
+            return duration
+    return None
+
+
+def classified_rate_limit_windows(
+    snapshot: object,
+) -> tuple[tuple[float, datetime] | None, tuple[float, datetime] | None]:
+    if not isinstance(snapshot, dict):
+        return None, None
+
+    entries: list[tuple[str, tuple[float, datetime], int | None]] = []
+    for key in ("primary", "secondary"):
+        raw_window = snapshot.get(key)
+        parsed = rate_window(raw_window)
+        if parsed is not None:
+            entries.append((key, parsed, rate_window_duration_minutes(raw_window)))
+
+    five_hour_entry = next((entry for entry in entries if entry[2] == 300), None)
+    weekly_entry = next((entry for entry in entries if entry[2] == 10080), None)
+    used_keys = {entry[0] for entry in (five_hour_entry, weekly_entry) if entry is not None}
+
+    if len(entries) >= 2:
+        if five_hour_entry is None:
+            five_hour_entry = next(
+                (entry for entry in entries if entry[0] == "primary" and entry[0] not in used_keys),
+                next((entry for entry in entries if entry[0] not in used_keys), None),
+            )
+            if five_hour_entry is not None:
+                used_keys.add(five_hour_entry[0])
+        if weekly_entry is None:
+            weekly_entry = next(
+                (entry for entry in entries if entry[0] == "secondary" and entry[0] not in used_keys),
+                next((entry for entry in entries if entry[0] not in used_keys), None),
+            )
+    elif len(entries) == 1 and five_hour_entry is None and weekly_entry is None:
+        only_entry = entries[0]
+        if only_entry[0] == "secondary":
+            weekly_entry = only_entry
+        else:
+            five_hour_entry = only_entry
+
+    return (
+        None if five_hour_entry is None else five_hour_entry[1],
+        None if weekly_entry is None else weekly_entry[1],
+    )
+
+
 def reset_credits_available_count(payload: object) -> int | None:
     if not isinstance(payload, dict):
         return None
@@ -571,7 +625,7 @@ def snapshot_by_limit_id(snapshots: list[dict], limit_id: str) -> dict | None:
     return None
 
 
-def app_server_rate_limits() -> tuple[float, datetime, float, datetime, int | None]:
+def app_server_rate_limits() -> tuple[float | None, datetime | None, float | None, datetime | None, int | None]:
     payload = app_server_request("account/rateLimits/read")
     default_snapshot = payload.get("rateLimits", payload.get("rate_limits"))
     by_limit_id = payload.get("rateLimitsByLimitId", payload.get("rate_limits_by_limit_id")) or {}
@@ -604,12 +658,18 @@ def app_server_rate_limits() -> tuple[float, datetime, float, datetime, int | No
     if primary_snapshot is None or weekly_snapshot is None:
         raise QuotaReadError("Codex app-server quota response did not include usable snapshots")
 
-    primary = rate_window(primary_snapshot.get("primary"))
-    secondary = rate_window(weekly_snapshot.get("secondary"))
-    if primary is None or secondary is None:
-        raise QuotaReadError("Codex app-server quota response did not include both quota windows")
+    primary, _ = classified_rate_limit_windows(primary_snapshot)
+    _, secondary = classified_rate_limit_windows(weekly_snapshot)
+    if primary is None and secondary is None:
+        raise QuotaReadError("Codex app-server quota response did not include a supported quota window")
 
-    return primary[0], primary[1], secondary[0], secondary[1], reset_credits
+    return (
+        None if primary is None else primary[0],
+        None if primary is None else primary[1],
+        None if secondary is None else secondary[0],
+        None if secondary is None else secondary[1],
+        reset_credits,
+    )
 
 
 def reversed_session_lines(path: Path):
@@ -648,7 +708,7 @@ def reversed_session_lines(path: Path):
                 yield line
 
 
-def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | None] | None:
+def latest_codex_rate_limits() -> tuple[float | None, datetime | None, float | None, datetime | None, int | None] | None:
     if not sessions_dir.exists():
         raise QuotaReadError(f"Cannot find Codex sessions directory: {sessions_dir}")
 
@@ -665,7 +725,7 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | 
         raise QuotaReadError(f"No Codex session JSONL files found under: {sessions_dir}")
 
     best_seen_at: datetime | None = None
-    best_value: tuple[float, datetime, float, datetime, int | None] | None = None
+    best_value: tuple[float | None, datetime | None, float | None, datetime | None, int | None] | None = None
 
     for modified_at, path in files[:80]:
         if best_seen_at is not None:
@@ -688,18 +748,23 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | 
                 limits = payload.get("rate_limits", {})
                 if not accepts_rate_limit(limits):
                     continue
-                primary = rate_window(limits.get("primary"))
-                secondary = rate_window(limits.get("secondary"))
+                primary, secondary = classified_rate_limit_windows(limits)
                 seen_at = parse_date(event.get("timestamp"))
             except Exception:
                 continue
 
-            if primary is None or secondary is None or seen_at is None:
+            if (primary is None and secondary is None) or seen_at is None:
                 continue
 
             if best_seen_at is None or seen_at > best_seen_at:
                 best_seen_at = seen_at
-                best_value = (primary[0], primary[1], secondary[0], secondary[1], None)
+                best_value = (
+                    None if primary is None else primary[0],
+                    None if primary is None else primary[1],
+                    None if secondary is None else secondary[0],
+                    None if secondary is None else secondary[1],
+                    None,
+                )
 
             break
 
@@ -710,7 +775,7 @@ def latest_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | 
     return best_value
 
 
-def current_codex_rate_limits() -> tuple[float, datetime, float, datetime, int | None]:
+def current_codex_rate_limits() -> tuple[float | None, datetime | None, float | None, datetime | None, int | None]:
     source = os.environ.get("CODEX_QUOTA_SOURCE", "auto").strip().lower()
 
     if source in {"session", "sessions", "logs", "jsonl"}:
@@ -741,9 +806,9 @@ def write_json_file(path: Path, payload: dict) -> None:
 
 
 def write_success_cache(
-    five_hour: float,
+    five_hour: float | None,
     five_hour_reset: datetime | None,
-    weekly: float,
+    weekly: float | None,
     weekly_reset: datetime | None,
     reset_credits: int | None,
 ) -> None:
@@ -751,9 +816,9 @@ def write_success_cache(
     write_json_file(
         cache_file,
         {
-            "fiveHourRemainingPercent": float(five_hour),
+            "fiveHourRemainingPercent": None if five_hour is None else float(five_hour),
             "fiveHourResetAt": date_to_text(five_hour_reset),
-            "weeklyRemainingPercent": float(weekly),
+            "weeklyRemainingPercent": None if weekly is None else float(weekly),
             "weeklyResetAt": date_to_text(weekly_reset),
             "resetCreditsAvailableCount": reset_credits,
             "refreshedAt": now,
@@ -770,7 +835,9 @@ def read_cache_payload() -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, datetime | None, float, datetime | None, int | None]:
+def cached_rate_limits_after_error(
+    error: QuotaReadError,
+) -> tuple[float | None, datetime | None, float | None, datetime | None, int | None]:
     payload = read_cache_payload()
     if payload is None:
         raise error
@@ -796,11 +863,17 @@ def cached_rate_limits_after_error(error: QuotaReadError) -> tuple[float, dateti
     weekly_reset = parse_date(payload.get("weeklyResetAt", payload.get("weekly_reset_at")))
     reset_credits = reset_credits_available_count(payload)
 
-    if five_hour is None or weekly is None:
+    if five_hour is None and weekly is None:
         raise error
 
     log_line("stale", f"Using cached quota after failed refresh {failures}/{STALE_ERROR_THRESHOLD}: {error}")
-    return float(five_hour), five_hour_reset, float(weekly), weekly_reset, reset_credits
+    return (
+        None if five_hour is None else float(five_hour),
+        five_hour_reset,
+        None if weekly is None else float(weekly),
+        weekly_reset,
+        reset_credits,
+    )
 
 
 def local_quota_fallback() -> tuple[float | None, datetime | None, float | None, datetime | None, int | None]:
@@ -853,39 +926,58 @@ try:
             if not env_flag("CODEX_QUOTA_USE_FALLBACK"):
                 raise
             five_hour, five_hour_reset, weekly, weekly_reset, reset_credits = local_quota_fallback()
-            if five_hour is None or weekly is None:
+            if five_hour is None and weekly is None:
                 raise QuotaReadError(f"Fallback quota file is missing or invalid: {quota_file}")
 
     weekly_quota_label = weekly_label()
 
-    primary_text = f"5h {colored_percent(five_hour)} {format_time(five_hour_reset)}"
-    weekly_text = f"{weekly_quota_label} {colored_percent(weekly)} {format_time(weekly_reset)}"
+    primary_text = None if five_hour is None else f"5h {colored_percent(five_hour)} {format_time(five_hour_reset)}"
+    weekly_text = None if weekly is None else f"{weekly_quota_label} {colored_percent(weekly)} {format_time(weekly_reset)}"
     reset_text = reset_credits_text(reset_credits)
     bar_slots = compact_bar_slots()
-    primary_bar_text = f"5h {progress_bar(five_hour)} {colored_percent(five_hour)} {format_time(five_hour_reset)}"
-    weekly_bar_text = f"{weekly_quota_label} {progress_bar(weekly)} {colored_percent(weekly)} {format_time(weekly_reset)}"
-    compact_bar_text = (
-        f"{colored_label('5h', five_hour)} {progress_bar(five_hour, bar_slots)} {colored_percent(five_hour)} {format_time_compact(five_hour_reset)} "
-        f"{ANSI_GRAY}|{ANSI_RESET} "
-        f"{colored_label(weekly_quota_label, weekly)} {progress_bar(weekly, bar_slots)} {colored_percent(weekly)} {format_time_compact(weekly_reset)}"
-        f"{reset_text}"
-    )
+    primary_bar_text = None if five_hour is None else f"5h {progress_bar(five_hour)} {colored_percent(five_hour)} {format_time(five_hour_reset)}"
+    weekly_bar_text = None if weekly is None else f"{weekly_quota_label} {progress_bar(weekly)} {colored_percent(weekly)} {format_time(weekly_reset)}"
+
+    compact_bar_parts = []
+    if five_hour is not None:
+        compact_bar_parts.append(
+            f"{colored_label('5h', five_hour)} {progress_bar(five_hour, bar_slots)} {colored_percent(five_hour)} {format_time_compact(five_hour_reset)}"
+        )
+    if weekly is not None:
+        compact_bar_parts.append(
+            f"{colored_label(weekly_quota_label, weekly)} {progress_bar(weekly, bar_slots)} {colored_percent(weekly)} {format_time_compact(weekly_reset)}"
+        )
+    compact_bar_text = f" {ANSI_GRAY}|{ANSI_RESET} ".join(compact_bar_parts) + reset_text
+
+    compact_parts = [part for part in (primary_text, weekly_text) if part is not None]
+    compact_text = " | ".join(compact_parts) + reset_text
+    multiline_parts = compact_parts.copy()
+    if reset_text:
+        multiline_parts.append(reset_text.strip())
+    multiline_text = "\n".join(multiline_parts)
 
     if display_mode in {"primary", "5h", "five-hour"}:
+        if primary_text is None:
+            raise QuotaReadError(localized("当前账号没有 5 小时额度窗口", "The current account has no 5-hour quota window"))
         emit(primary_text)
     elif display_mode in {"secondary", "week", "weekly"}:
+        if weekly_text is None:
+            raise QuotaReadError(localized("当前账号没有周额度窗口", "The current account has no weekly quota window"))
         emit(weekly_text)
     elif display_mode in {"primary-bar", "5h-bar", "five-hour-bar"}:
+        if primary_bar_text is None:
+            raise QuotaReadError(localized("当前账号没有 5 小时额度窗口", "The current account has no 5-hour quota window"))
         emit(primary_bar_text)
     elif display_mode in {"secondary-bar", "week-bar", "weekly-bar"}:
+        if weekly_bar_text is None:
+            raise QuotaReadError(localized("当前账号没有周额度窗口", "The current account has no weekly quota window"))
         emit(weekly_bar_text)
     elif display_mode in {"compact-bar", "horizontal-bar"}:
         emit(compact_bar_text)
     elif display_mode == "compact":
-        emit(f"{primary_text} | {weekly_text}{reset_text}")
+        emit(compact_text)
     else:
-        reset_line = f"\n{reset_text.strip()}" if reset_text else ""
-        emit(f"{primary_text}\n{weekly_text}{reset_line}")
+        emit(multiline_text)
 except Exception as error:
     emit_error(str(error))
 PY

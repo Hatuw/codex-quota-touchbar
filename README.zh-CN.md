@@ -16,6 +16,12 @@
 5h ▬▬▬▬▬▬ 99% 19:36 | 周 ▬▬▬▬▬▬ 26% 6/11 09:02 🎟️×1  ↻
 ```
 
+如果当前账号只返回新的单一周额度窗口，组件会自动缩短为：
+
+```text
+周 ▬▬▬▬▬▬ 98% 7/20 05:21 🎟️×1  ↻
+```
+
 在 MTMR 中会自动上色：
 
 - 绿色：剩余额度 `60%` 及以上。
@@ -67,10 +73,12 @@ helper 会自动查找新版 `/Applications/ChatGPT.app` 和旧版 `/Application
 
 组件默认显示：
 
-- 5 小时额度：Codex 主 `rateLimits` 返回里的账号 primary 额度。
-- 周额度：Codex 主 `rateLimits` 返回里的账号 secondary 额度。
+- 5 小时额度：按 `windowDurationMins=300` 识别，不依赖固定的 `primary` 字段位置。
+- 周额度：按 `windowDurationMins=10080` 识别，不依赖固定的 `secondary` 字段位置。
 - 刷新/重置时间：分别来自对应额度窗口的 `resets_at`。
 - 额度重置次数：来自 `rateLimitResetCredits.availableCount`，显示为 `🎟️×1`；它不是右侧 `↻` 手动刷新按钮的次数。
+
+旧版双窗口账号会继续显示“5h + 周”。新版 ChatGPT/Codex 如果只返回一个 7 天窗口，helper 会只显示周额度，不会把它误当成 5 小时额度，也不会因为 `secondary=null` 报错。
 
 如果 Codex app-server 短暂不可用，helper 会先显示上一次成功读取的额度，避免偶发错误打断 Touch Bar。
 如果连续多次刷新都失败，才会显示错误，避免一直保留过旧数据。
